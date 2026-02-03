@@ -590,9 +590,10 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
         const sunAngle = sunProgress * Math.PI; // 0 to PI for sun arc
 
         // Sun position in sky (arc from east to west)
-        const sunHeight = Math.sin(sunAngle) * 15;
-        const sunX = Math.cos(sunAngle) * 12 - 6;
-        sun.position.set(sunX, Math.max(sunHeight, -5), -8);
+        // Adjusted to go wider (more left) to avoid crashing into the ground mesh at sunset
+        const sunHeight = Math.sin(sunAngle) * 16; // Slightly higher arc
+        const sunX = Math.cos(sunAngle) * 22 - 2; // Wider arc: Starts at 20 (Right), Ends at -24 (Left of ground edge)
+        sun.position.set(sunX, Math.max(sunHeight, -10), -8);
         sunLight.position.set(sunX, Math.max(sunHeight + 2, 1), -5);
 
         // Determine time of day

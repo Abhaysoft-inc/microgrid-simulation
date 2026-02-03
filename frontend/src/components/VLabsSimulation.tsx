@@ -360,6 +360,7 @@ export default function VLabsSimulation() {
             },
         });
 
+        setCurrentHour(0);
         setIsPlaying(true);
     }, [batteryCapacity, initialSoC, peakPrice, offPeakPrice]);
 
@@ -637,7 +638,7 @@ export default function VLabsSimulation() {
             {/* Challenge Selection Modal */}
             {showChallengeModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300">
+                    <div className="bg-white rounded-2xl border border-slate-200 max-w-lg w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300">
                         {/* Header */}
                         <div className="flex items-center justify-between p-4 border-b border-slate-100">
                             <div className="flex items-center gap-2">
@@ -754,7 +755,7 @@ export default function VLabsSimulation() {
             {/* Report Card Modal */}
             {showReportCard && reportData && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300">
+                    <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300">
                         {/* Header */}
                         <div className="flex items-center justify-between p-3 border-b border-slate-100">
                             <div className="flex items-center gap-2">
@@ -939,10 +940,11 @@ export default function VLabsSimulation() {
 
                 {activeTab === "simulation" && (
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
                         {/* Left Panel - Energy Flow Graph */}
                         <div className="lg:col-span-3 space-y-4">
                             {/* Energy Flow Graph - Collapsible */}
-                            <div id="tour-procedure-step" className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+                            <div id="tour-procedure-step" className="bg-white rounded-lg border border-slate-200 overflow-hidden">
                                 <button
                                     onClick={() => setIsEnergyFlowExpanded(!isEnergyFlowExpanded)}
                                     className="w-full p-3 flex items-center justify-between bg-slate-50 border-b border-slate-200 hover:bg-slate-100 transition-colors"
@@ -966,7 +968,7 @@ export default function VLabsSimulation() {
 
                             {/* Strategy Toggle */}
                             {result && (
-                                <div id="tour-strategy-toggle" className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                                <div id="tour-strategy-toggle" className="bg-white rounded-lg border border-slate-200 p-4">
                                     <h3 className="text-sm font-semibold text-slate-900 mb-3">Active Strategy</h3>
                                     <div className="grid grid-cols-2 gap-2">
                                         <button
@@ -992,7 +994,7 @@ export default function VLabsSimulation() {
                             )}
 
                             {/* Electricity Bill Card - Collapsible */}
-                            <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+                            <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
                                 <button
                                     onClick={() => setIsBillExpanded(!isBillExpanded)}
                                     className="w-full p-3 flex items-center justify-between bg-red-50 border-b border-red-100 hover:bg-red-100 transition-colors"
@@ -1026,7 +1028,7 @@ export default function VLabsSimulation() {
                             </div>
 
                             {/* Battery Status Card - Collapsible */}
-                            <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+                            <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
                                 <button
                                     onClick={() => setIsBatteryExpanded(!isBatteryExpanded)}
                                     className="w-full p-3 flex items-center justify-between bg-slate-50 border-b border-slate-200 hover:bg-slate-100 transition-colors"
@@ -1100,7 +1102,7 @@ export default function VLabsSimulation() {
 
                             {/* Cost Efficiency Card - Collapsible */}
                             {result && (
-                                <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+                                <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
                                     <button
                                         onClick={() => setIsCostEfficiencyExpanded(!isCostEfficiencyExpanded)}
                                         className="w-full p-3 flex items-center justify-between bg-slate-50 border-b border-slate-200 hover:bg-slate-100 transition-colors"
@@ -1140,7 +1142,7 @@ export default function VLabsSimulation() {
 
                         {/* Center - 3D Visualization */}
                         <div className="lg:col-span-6 space-y-4">
-                            <div id="tour-live-view" className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm">
+                            <div id="tour-live-view" className="bg-white rounded-lg border border-slate-200 overflow-hidden">
                                 <div className="p-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
                                     <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
                                         <Zap className="w-4 h-4 text-blue-600" />
@@ -1199,7 +1201,7 @@ export default function VLabsSimulation() {
                             </div>
 
                             {/* Current Stats Below Visualization */}
-                            <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                            <div className="bg-white rounded-lg border border-slate-200 p-4">
                                 <h3 className="text-sm font-semibold text-slate-900 mb-3">Current Statistics</h3>
                                 <div className="grid grid-cols-4 gap-3">
                                     <StatCard
@@ -1237,7 +1239,7 @@ export default function VLabsSimulation() {
                         {/* Right - Configuration & Results */}
                         <div id="tour-stats-charts" className="lg:col-span-3 space-y-4">
                             {/* Live Battery Status Strip */}
-                            <div className="bg-white rounded-lg border border-slate-200 p-3 shadow-sm flex items-center justify-between gap-3">
+                            <div className="bg-white rounded-lg border border-slate-200 p-3 flex items-center justify-between gap-3">
                                 <div className="flex items-center gap-2 min-w-max">
                                     <div className={`w-2 h-2 rounded-full ${currentData.battery_charge > 0 ? "bg-emerald-500 animate-pulse" : currentData.battery_discharge > 0 ? "bg-amber-500 animate-pulse" : "bg-slate-300"}`} />
                                     <span className="text-xs font-semibold text-slate-700">Battery</span>
@@ -1252,7 +1254,7 @@ export default function VLabsSimulation() {
                             </div>
 
                             {/* Configuration Panel */}
-                            <div id="tour-configuration" className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                            <div id="tour-configuration" className="bg-white rounded-lg border border-slate-200 p-4">
                                 <h3 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
                                     <Settings className="w-4 h-4 text-blue-600" />
                                     System Configuration
@@ -1420,7 +1422,7 @@ export default function VLabsSimulation() {
                                     id="tour-run-button"
                                     onClick={runSimulation}
                                     disabled={isLoading}
-                                    className="w-full mt-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:bg-slate-300 rounded-lg font-medium text-sm text-white transition-all shadow-sm flex items-center justify-center gap-2"
+                                    className="w-full mt-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:bg-slate-300 rounded-lg font-medium text-sm text-white transition-all flex items-center justify-center gap-2"
                                 >
                                     {isLoading ? (
                                         <>Running...</>
@@ -1463,7 +1465,7 @@ export default function VLabsSimulation() {
                 )}
 
                 {activeTab === "analysis" && !result && (
-                    <div className="bg-white rounded-lg border border-gray-200 p-12 text-center shadow-sm">
+                    <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
                         <FlaskConical className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                         <h3 className="text-xl font-semibold text-gray-900 mb-2">No Simulation Data</h3>
                         <p className="text-gray-600 mb-4">Run a simulation first to see the analysis.</p>
@@ -1505,7 +1507,7 @@ function StatCard({ icon, label, value, color, bgColor }: {
     bgColor: string; // Kept for interface compatibility but ignored in design
 }) {
     return (
-        <div className="bg-white rounded-lg p-3 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-blue-300 transition-colors">
+        <div className="bg-white rounded-lg p-3 border border-slate-200 relative overflow-hidden group hover:bg-slate-50 transition-colors">
             <div className={`absolute top-0 right-0 p-2 opacity-10 ${color}`}>
                 {icon}
             </div>
@@ -1523,7 +1525,7 @@ function StatCard({ icon, label, value, color, bgColor }: {
 // Theory Content Component
 function TheoryContent() {
     return (
-        <div className="bg-white rounded-lg border border-slate-200 p-8 shadow-sm max-w-5xl mx-auto">
+        <div className="bg-white rounded-lg border border-slate-200 p-8 max-w-5xl mx-auto">
             <h2 className="text-2xl font-bold text-slate-900 mb-8 flex items-center gap-3 pb-4 border-b border-slate-100">
                 <BookOpen className="w-6 h-6 text-blue-600" />
                 Theory: Microgrid Energy Management System & Scheduling
@@ -1622,7 +1624,7 @@ function TheoryContent() {
                     </h3>
 
                     <div className="grid md:grid-cols-2 gap-6">
-                        <div className="border border-slate-200 rounded-xl p-5 hover:shadow-md transition-shadow">
+                        <div className="border border-slate-200 rounded-xl p-5 hover:bg-slate-50 transition-colors">
                             <div className="flex items-center gap-3 mb-4">
                                 <div className="p-2 bg-slate-100 rounded-lg">
                                     <RotateCcw className="w-5 h-5 text-slate-600" />
@@ -1648,7 +1650,7 @@ function TheoryContent() {
                             </ul>
                         </div>
 
-                        <div className="border border-blue-200 bg-blue-50/10 rounded-xl p-5 hover:shadow-md transition-shadow relative overflow-hidden">
+                        <div className="border border-blue-200 bg-blue-50/10 rounded-xl p-5 hover:bg-blue-50/20 transition-colors relative overflow-hidden">
                             <div className="absolute top-0 right-0 p-2 opacity-10">
                                 <Zap className="w-24 h-24 text-blue-600" />
                             </div>
@@ -1726,7 +1728,7 @@ function ProcedureContent({ currentStep, completedSteps, onStepChange }: {
     onStepChange: (step: number) => void;
 }) {
     return (
-        <div className="bg-white rounded-lg border border-slate-200 p-6 shadow-sm">
+        <div className="bg-white rounded-lg border border-slate-200 p-6">
             <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
                 <Settings className="w-5 h-5 text-blue-600" />
                 Simulation Walkthrough
@@ -1742,7 +1744,7 @@ function ProcedureContent({ currentStep, completedSteps, onStepChange }: {
                             key={step.id}
                             onClick={() => onStepChange(index)}
                             className={`w-full text-left p-4 rounded-lg border transition-all group ${isActive
-                                ? "bg-slate-50 border-blue-500 shadow-sm"
+                                ? "bg-slate-50 border-blue-500"
                                 : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50"
                                 }`}
                         >
@@ -1779,7 +1781,7 @@ function AnalysisContent({ result }: { result: SimulationResult }) {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
                 <div className="flex items-center justify-between mb-6">
                     <h2 className="text-xl font-medium text-gray-900">Analysis Results</h2>
                     <span className="text-sm text-gray-400">Baseline vs Smart Strategy</span>
@@ -1885,7 +1887,7 @@ function AnalysisContent({ result }: { result: SimulationResult }) {
             </div>
 
             {/* Hourly Breakdown */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
                 <h3 className="text-sm font-medium text-gray-500 mb-4">24-Hour Breakdown</h3>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -2035,7 +2037,7 @@ function QuizContent() {
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
-            <div className="bg-white rounded-xl p-8 shadow-sm border border-slate-200">
+            <div className="bg-white rounded-xl p-8 border border-slate-200">
                 <div className="flex items-center gap-4 mb-6">
                     <div className="p-3 bg-indigo-50 rounded-lg">
                         <CheckSquare className="w-8 h-8 text-indigo-600" />
@@ -2059,7 +2061,7 @@ function QuizContent() {
                                         disabled={submitted}
                                         onClick={() => setAnswers({ ...answers, [q.id]: optIdx })}
                                         className={`w-full text-left p-4 rounded-md border transition-all flex items-center justify-between ${answers[q.id] === optIdx
-                                            ? "bg-indigo-50 border-indigo-200 text-indigo-900 shadow-sm"
+                                            ? "bg-indigo-50 border-indigo-200 text-indigo-900"
                                             : "bg-white border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700"
                                             } ${showResults && q.correct === optIdx
                                                 ? "!bg-green-50 !border-green-300 !text-green-800"
@@ -2103,7 +2105,7 @@ function QuizContent() {
                             disabled={Object.keys(answers).length < questions.length}
                             className={`px-6 py-2.5 rounded-lg font-medium text-white transition-colors ${Object.keys(answers).length < questions.length
                                 ? "bg-slate-300 cursor-not-allowed"
-                                : "bg-indigo-600 hover:bg-indigo-700 shadow-sm"
+                                : "bg-indigo-600 hover:bg-indigo-700"
                                 }`}
                         >
                             Submit Answers
@@ -2173,7 +2175,7 @@ function ReferencesContent() {
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
-            <div className="bg-white rounded-xl p-8 shadow-sm border border-slate-200">
+            <div className="bg-white rounded-xl p-8 border border-slate-200">
                 <div className="flex items-center gap-4 mb-6">
                     <div className="p-3 bg-amber-50 rounded-lg">
                         <FileText className="w-8 h-8 text-amber-600" />

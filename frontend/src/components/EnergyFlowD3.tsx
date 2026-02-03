@@ -279,26 +279,23 @@ export default function EnergyFlowD3({ data, currentHour, strategy }: EnergyFlow
 
     if (data.length === 0) {
         return (
-            <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">Energy Flow Chart</h3>
-                <div className="h-[200px] flex items-center justify-center text-gray-500 text-sm">
-                    Run simulation to see energy flow
-                </div>
+            <div className="text-center p-4 text-gray-500 text-sm">
+                Run simulation to see energy flow
             </div>
         );
     }
 
     return (
-        <div ref={containerRef} className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center justify-between">
-                <span>24-Hour Energy Flow</span>
+        <div ref={containerRef} className="w-full">
+            {/* Legend/Status inside graph area */}
+            <div className="flex justify-end mb-2">
                 <span className={`text-xs px-2 py-1 rounded border ${strategy === "smart"
                     ? "bg-green-50 text-green-700 border-green-200"
                     : "bg-red-50 text-red-700 border-red-200"
                     }`}>
                     {strategy === "smart" ? "Smart" : "Baseline"}
                 </span>
-            </h3>
+            </div>
             <svg ref={svgRef} className="w-full" />
         </div>
     );

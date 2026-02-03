@@ -66,13 +66,13 @@ input[type="range"]::-webkit-slider-thumb {
   border-radius: 50%;
   cursor: pointer;
   margin-top: -6px;
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+  box-shadow: none;
   transition: all 0.2s ease;
 }
 
 input[type="range"]::-webkit-slider-thumb:hover {
   transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.6);
+  box-shadow: none;
 }
 
 /* Number input styling */
@@ -148,11 +148,11 @@ input[type="number"]::-webkit-inner-spin-button {
 
   0%,
   100% {
-    box-shadow: 0 0 5px currentColor, 0 0 10px currentColor, 0 0 15px currentColor;
+    /* box-shadow: 0 0 5px currentColor, 0 0 10px currentColor, 0 0 15px currentColor; */
   }
 
   50% {
-    box-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor;
+    /* box-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor; */
   }
 }
 
@@ -163,28 +163,28 @@ input[type="number"]::-webkit-inner-spin-button {
 /* Energy flow arrow colors */
 .energy-solar {
   color: #fbbf24;
-  text-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
+  text-shadow: none;
 }
 
 .energy-battery {
   color: #3b82f6;
-  text-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+  text-shadow: none;
 }
 
 .energy-grid {
   color: #ef4444;
-  text-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+  text-shadow: none;
 }
 
 /* Custom slider variants */
 input[type="range"].slider-solar::-webkit-slider-thumb {
   background: linear-gradient(135deg, #fbbf24, #f59e0b);
-  box-shadow: 0 2px 8px rgba(251, 191, 36, 0.5);
+  box-shadow: none;
 }
 
 input[type="range"].slider-battery::-webkit-slider-thumb {
   background: linear-gradient(135deg, #22c55e, #16a34a);
-  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.5);
+  box-shadow: none;
 }
 
 /* Hover lift effect */
@@ -194,7 +194,7 @@ input[type="range"].slider-battery::-webkit-slider-thumb {
 
 .hover-lift:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  box-shadow: none;
 }
 
 /* Card shimmer effect */
