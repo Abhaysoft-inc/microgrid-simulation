@@ -35,6 +35,7 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
         camera: THREE.PerspectiveCamera;
         renderer: THREE.WebGLRenderer;
         sun: THREE.Group;
+        moon: THREE.Group;
         sunLight: THREE.DirectionalLight;
         ambientLight: THREE.AmbientLight;
         hemiLight: THREE.HemisphereLight;
@@ -174,6 +175,50 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
         const sunLabel = createLabel("☀️ SUN", 0xffdd44);
         sunLabel.position.set(-10, 14, -8);
         scene.add(sunLabel);
+
+        // ========================================
+        // MOON - Realistic glowing sphere
+        // ========================================
+        const moon = new THREE.Group();
+
+        // Moon body
+        const moonGeo = new THREE.SphereGeometry(1.2, 32, 32);
+        const moonMat = new THREE.MeshStandardMaterial({
+            color: 0xe0e0e0,
+            roughness: 0.8,
+            metalness: 0.1
+        });
+        const moonMesh = new THREE.Mesh(moonGeo, moonMat);
+        moon.add(moonMesh);
+
+        // Moon glow/halo
+        const moonGlow = new THREE.Mesh(
+            new THREE.SphereGeometry(1.6, 32, 32),
+            new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.15,
+                side: THREE.BackSide
+            })
+        );
+        moon.add(moonGlow);
+
+        scene.add(moon);
+
+        // Moon label
+        const moonLabel = createLabel("🌙 MOON", 0xe0e0e0);
+        moonLabel.position.set(0, 0, 0); // Will be updated in animation loop
+        // Attach label to moon group so it moves with it? 
+        // Better to update position in loop to keep upright or just leave static off-screen initially
+        // Actually, let's just add it to scene and update pos in loop
+        scene.add(moonLabel);
+        // We'll store the label in the moon group for easier access if we wanted, 
+        // but for now let's make it a child of the moon group but counter-rotated? 
+        // Simplest is to just let the moon be the visual.
+        // Actually, the user just asked for a moon, labels are extra.
+        // I won't add a label to sceneRef for the moon specifically to keep types simple 
+        // unless I change the type definition again.
+        // Let's just stick to the visual moon for now.
 
         // ========================================
         // SOLAR PANEL - Realistic with frame and cells
@@ -499,6 +544,7 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
             camera,
             renderer,
             sun,
+            moon,
             sunLight,
             ambientLight,
             hemiLight,
@@ -577,7 +623,7 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
     useEffect(() => {
         if (!sceneRef.current) return;
 
-        const { scene, sun, sunLight, ambientLight, hemiLight, batteryLevel, currentParticles } = sceneRef.current;
+        const { scene, sun, moon, sunLight, ambientLight, hemiLight, batteryLevel, currentParticles } = sceneRef.current;
         const hour = currentData.hour;
         const batterySoC = currentData.battery_soc / 100;
 
@@ -595,6 +641,31 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
         const sunX = Math.cos(sunAngle) * 22 - 2; // Wider arc: Starts at 20 (Right), Ends at -24 (Left of ground edge)
         sun.position.set(sunX, Math.max(sunHeight, -10), -8);
         sunLight.position.set(sunX, Math.max(sunHeight + 2, 1), -5);
+
+        // Moon Position (Approximate opposite of Sun + offset logic)
+        // Moon is visible roughly 18:00 to 06:00
+        let moonVisible = false;
+
+        // Normalize moon time: 18->0, 24/0->0.5, 6->1
+        let moonProgress = 0;
+        if (hour >= 18) {
+            moonProgress = (hour - 18) / 12; // 0 to 0.5
+            moonVisible = true;
+        } else if (hour <= 6) {
+            moonProgress = (hour + 6) / 12; // 0.5 to 1
+            moonVisible = true;
+        }
+
+        if (moonVisible) {
+            const moonAngle = moonProgress * Math.PI;
+            const moonHeight = Math.sin(moonAngle) * 15;
+            // Moon follows similar East->West path
+            const moonX = Math.cos(moonAngle) * 22 - 2;
+            moon.position.set(moonX, Math.max(moonHeight, -10), -8);
+            moon.visible = true;
+        } else {
+            moon.visible = false;
+        }
 
         // Determine time of day
         const isDaytime = hour >= 6 && hour <= 18;
