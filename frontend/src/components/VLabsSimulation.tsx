@@ -14,9 +14,10 @@
 
 import React, { useState, useCallback, useEffect } from "react";
 import Joyride, { CallBackProps, STATUS, Step } from 'react-joyride';
-import { Play, Pause, RotateCcw, ChevronLeft, ChevronRight, Sun, Battery, Home, Zap, Settings, BarChart3, BookOpen, FlaskConical, CheckSquare, FileText, CheckCircle2, XCircle, LayoutList, Lightbulb, HelpCircle, X, Award, Leaf, TrendingUp, Target, AlertTriangle, CloudRain, BatteryWarning } from "lucide-react";
+import { Play, Pause, RotateCcw, ChevronLeft, ChevronRight, Sun, Battery, Home, Zap, Settings, BarChart3, BookOpen, FlaskConical, CheckSquare, FileText, CheckCircle2, XCircle, LayoutList, Lightbulb, HelpCircle, X, Award, Leaf, TrendingUp, Target, AlertTriangle, CloudRain, BatteryWarning, MessageSquare } from "lucide-react";
 import Microgrid3DScene from "./Microgrid3DScene";
 import EnergyFlowD3 from "./EnergyFlowD3";
+import FeedbackTab from "./FeedbackTab";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -91,7 +92,7 @@ interface SimulationResult {
 
 export default function VLabsSimulation() {
     // Tab state
-    const [activeTab, setActiveTab] = useState<"theory" | "procedure" | "simulation" | "analysis" | "quiz" | "references">("theory");
+    const [activeTab, setActiveTab] = useState<"theory" | "procedure" | "simulation" | "analysis" | "quiz" | "references" | "feedback">("theory");
 
     // Procedure step state
     const [currentStep, setCurrentStep] = useState(0);
@@ -114,7 +115,7 @@ export default function VLabsSimulation() {
 
     // Animation state
     const [isPlaying, setIsPlaying] = useState(false);
-    const [currentHour, setCurrentHour] = useState(0);
+    const [currentHour, setCurrentHour] = useState(6);
     const [animationSpeed] = useState(1000);
     const [showReportCard, setShowReportCard] = useState(false);
     const [reportCardShown, setReportCardShown] = useState(false); // Track if report was already shown for this run
@@ -388,14 +389,11 @@ export default function VLabsSimulation() {
 
             const data: SimulationResult = await response.json();
             setResult(data);
-            setCurrentHour(0);
+            setCurrentHour(6);
             setIsPlaying(true);
-
-            // Mark steps as completed based on action
-            if (!completedSteps.includes(currentStep)) {
-                setCompletedSteps([...completedSteps, currentStep]);
-            }
-        } catch (err) {
+            setCompletedSteps([...completedSteps, currentStep]);
+        }
+        catch (err) {
             console.error("Simulation error:", err);
             // Generate sample data for demo
             generateSampleData();
@@ -624,7 +622,7 @@ export default function VLabsSimulation() {
 
         setActiveChallenge({ id: selectedChallenge, difficulty: challengeDifficulty });
         setShowChallengeModal(false);
-        setCurrentHour(0);
+        setCurrentHour(6);
         setResult(null);
 
         // Auto-run simulation after setting up
@@ -837,7 +835,7 @@ export default function VLabsSimulation() {
                             <button
                                 onClick={() => {
                                     setShowReportCard(false);
-                                    setCurrentHour(0);
+                                    setCurrentHour(6);
                                     setIsPlaying(true);
                                 }}
                                 className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg flex items-center justify-center gap-2 transition-colors text-sm"
@@ -880,7 +878,7 @@ export default function VLabsSimulation() {
                                 <p className="text-xs text-slate-500 font-medium">Virtual Labs Experiment </p>
                             </div>
                         </div>
-                        <div className="hidden md:flex items-center gap-3 text-sm">
+                        {/* <div className="hidden md:flex items-center gap-3 text-sm">
                             <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-md border border-slate-200 text-xs font-medium">
                                 Delhi, India
                             </span>
@@ -891,7 +889,7 @@ export default function VLabsSimulation() {
                                 </span>
                                 System Online
                             </span>
-                        </div>
+                        </div> */}
                     </div>
                 </div>
             </header>
@@ -907,10 +905,11 @@ export default function VLabsSimulation() {
                             { id: "analysis", label: "Analysis", icon: BarChart3 },
                             { id: "quiz", label: "Quiz", icon: CheckSquare },
                             { id: "references", label: "References", icon: FileText },
+                            { id: "feedback", label: "Feedback", icon: MessageSquare },
                         ].map((tab) => (
                             <button
                                 key={tab.id}
-                                onClick={() => setActiveTab(tab.id as "theory" | "procedure" | "simulation" | "analysis" | "quiz" | "references")}
+                                onClick={() => setActiveTab(tab.id as "theory" | "procedure" | "simulation" | "analysis" | "quiz" | "references" | "feedback")}
                                 className={`flex items-center gap-2 px-6 py-3 text-sm font-medium transition-all ${activeTab === tab.id
                                     ? "bg-blue-50 text-blue-700 border-b-2 border-blue-600"
                                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
@@ -1484,6 +1483,10 @@ export default function VLabsSimulation() {
 
                 {activeTab === "references" && (
                     <ReferencesContent />
+                )}
+
+                {activeTab === "feedback" && (
+                    <FeedbackTab />
                 )}
             </main>
 
@@ -2197,9 +2200,14 @@ function ReferencesContent() {
                                 {section.items.map((item, i) => (
                                     <div key={i} className="group flex items-start justify-between">
                                         <div>
-                                            <h4 className="text-base font-medium text-blue-700 group-hover:underline cursor-pointer">
+                                            <a
+                                                href={item.link}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-base font-medium text-blue-700 hover:underline cursor-pointer inline-block"
+                                            >
                                                 {item.title}
-                                            </h4>
+                                            </a>
                                             <p className="text-sm text-slate-600 mt-1">{item.desc}</p>
                                         </div>
                                     </div>

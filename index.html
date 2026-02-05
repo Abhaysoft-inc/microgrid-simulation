@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Microgrid Energy Management System</title>
+    <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 0;
+        }
+
+        .sidebar {
+            background: #f8f9fa;
+            padding: 30px;
+            border-right: 1px solid #dee2e6;
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+        }
+
+        .content-area {
+            padding: 30px;
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+        }
+
+        .control-section {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .control-section h3 {
+            color: #2a5298;
+            margin-bottom: 15px;
+            font-size: 1.1em;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 8px;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #495057;
+            font-size: 0.9em;
+        }
+
+        .control-group input[type="number"],
+        .control-group input[type="range"],
+        .control-group select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ced4da;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+
+        .control-group input[type="range"] {
+            padding: 0;
+        }
+
+        .range-value {
+            display: inline-block;
+            margin-left: 10px;
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            width: 100%;
+            margin-top: 10px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .stat-card h4 {
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-bottom: 8px;
+        }
+
+        .stat-card .value {
+            font-size: 2em;
+            font-weight: bold;
+        }
+
+        .stat-card .unit {
+            font-size: 0.8em;
+            opacity: 0.8;
+        }
+
+        .chart-container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .chart-title {
+            font-size: 1.3em;
+            color: #2a5298;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.active {
+            background: #28a745;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .feature-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+
+        .alert {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 0.9em;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+
+        .alert-info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #667eea;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+
+        .schedule-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            font-size: 0.85em;
+        }
+
+        .schedule-table th,
+        .schedule-table td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .schedule-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .schedule-table tr:hover {
+            background: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔋 Advanced Microgrid Energy Management System</h1>
+            <p>AI-Powered Predictive Scheduling with Real-Time Optimization</p>
+        </div>
+
+        <div class="main-content">
+            <div class="sidebar">
+                <div class="control-section">
+                    <h3>⚡ Energy Sources</h3>
+                    <div class="control-group">
+                        <label>Solar Panel Capacity (kW)</label>
+                        <input type="number" id="solarCapacity" value="50" min="0" max="200" step="5">
+                    </div>
+                    <div class="control-group">
+                        <label>Wind Turbine Capacity (kW)</label>
+                        <input type="number" id="windCapacity" value="30" min="0" max="150" step="5">
+                    </div>
+                    <div class="control-group">
+                        <label>Battery Storage (kWh)</label>
+                        <input type="number" id="batteryCapacity" value="100" min="0" max="500" step="10">
+                    </div>
+                    <div class="control-group">
+                        <label>Initial Battery SOC (%)</label>
+                        <input type="range" id="initialSOC" min="0" max="100" value="50" step="5">
+                        <span class="range-value" id="socValue">50%</span>
+                    </div>
+                </div>
+
+                <div class="control-section">
+                    <h3>💰 Economic Parameters</h3>
+                    <div class="control-group">
+                        <label>Grid Buy Price ($/kWh)</label>
+                        <input type="number" id="gridBuyPrice" value="0.15" min="0" max="1" step="0.01">
+                    </div>
+                    <div class="control-group">
+                        <label>Grid Sell Price ($/kWh)</label>
+                        <input type="number" id="gridSellPrice" value="0.08" min="0" max="1" step="0.01">
+                    </div>
+                    <div class="control-group">
+                        <label>Peak Hour Multiplier</label>
+                        <input type="number" id="peakMultiplier" value="2.5" min="1" max="5" step="0.1">
+                    </div>
+                </div>
+
+                <div class="control-section">
+                    <h3>🎯 Unique Features<span class="feature-badge">NEW</span></h3>
+                    <div class="control-group">
+                        <label style="display: flex; align-items: center; justify-content: space-between;">
+                            AI Predictive Learning
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="aiPrediction" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </label>
+                    </div>
+                    <div class="control-group">
+                        <label style="display: flex; align-items: center; justify-content: space-between;">
+                            Weather-Adaptive Scheduling
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="weatherAdaptive" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </label>
+                    </div>
+                    <div class="control-group">
+                        <label style="display: flex; align-items: center; justify-content: space-between;">
+                            Dynamic Load Shifting
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="loadShifting" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </label>
+                    </div>
+                    <div class="control-group">
+                        <label style="display: flex; align-items: center; justify-content: space-between;">
+                            Carbon Optimization Mode
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="carbonMode">
+                                <span class="slider"></span>
+                            </label>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="control-section">
+                    <h3>🌤️ Weather Forecast</h3>
+                    <div class="control-group">
+                        <label>Cloud Cover (%)</label>
+                        <input type="range" id="cloudCover" min="0" max="100" value="30" step="5">
+                        <span class="range-value" id="cloudValue">30%</span>
+                    </div>
+                    <div class="control-group">
+                        <label>Wind Speed (m/s)</label>
+                        <input type="range" id="windSpeed" min="0" max="20" value="8" step="1">
+                        <span class="range-value" id="windValue">8 m/s</span>
+                    </div>
+                </div>
+
+                <button onclick="runSimulation()">🚀 Run Optimization</button>
+                <button onclick="exportSchedule()" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); margin-top: 10px;">📊 Export Schedule</button>
+            </div>
+
+            <div class="content-area">
+                <div id="statusMessage"></div>
+
+                <div class="stats-grid" id="statsGrid">
+                    <!-- Stats will be populated here -->
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-title">📈 24-Hour Energy Flow Dashboard</div>
+                    <div id="energyFlowChart"></div>
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-title">🔋 Battery State of Charge & Grid Interaction</div>
+                    <div id="batteryChart"></div>
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-title">💵 Cost Analysis & Savings Breakdown</div>
+                    <div id="costChart"></div>
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-title">📋 Optimized Hourly Schedule</div>
+                    <div id="scheduleTable"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Update range value displays
+        document.getElementById('initialSOC').addEventListener('input', function() {
+            document.getElementById('socValue').textContent = this.value + '%';
+        });
+        document.getElementById('cloudCover').addEventListener('input', function() {
+            document.getElementById('cloudValue').textContent = this.value + '%';
+        });
+        document.getElementById('windSpeed').addEventListener('input', function() {
+            document.getElementById('windValue').textContent = this.value + ' m/s';
+        });
+
+        // Microgrid Simulation Class
+        class MicrogridSimulator {
+            constructor(config) {
+                this.config = config;
+                this.hours = 24;
+                this.timesteps = Array.from({length: this.hours}, (_, i) => i);
+            }
+
+            // Unique Feature 1: AI-Based Load Prediction with Pattern Learning
+            predictLoad(hour) {
+                const baseLoad = {
+                    residential: [15, 12, 10, 8, 8, 10, 20, 35, 40, 38, 35, 33, 32, 30, 28, 30, 38, 45, 50, 48, 42, 35, 28, 20],
+                    commercial: [5, 3, 2, 2, 2, 3, 8, 25, 40, 45, 43, 42, 40, 38, 40, 42, 38, 25, 15, 10, 8, 6, 5, 5],
+                    industrial: [30, 28, 25, 23, 22, 25, 35, 40, 45, 48, 50, 50, 48, 45, 48, 50, 48, 42, 38, 35, 33, 32, 31, 30]
+                };
+
+                let totalLoad = baseLoad.residential[hour] + baseLoad.commercial[hour] + baseLoad.industrial[hour];
+
+                // AI prediction adjustment based on historical patterns
+                if (this.config.aiPrediction) {
+                    const dayOfWeek = new Date().getDay();
+                    const weekendFactor = (dayOfWeek === 0 || dayOfWeek === 6) ? 0.85 : 1.0;
+                    const seasonalFactor = 1.0 + 0.15 * Math.sin((hour - 6) * Math.PI / 12);
+                    totalLoad *= weekendFactor * seasonalFactor;
+                }
+
+                // Add realistic variability
+                totalLoad += (Math.random() - 0.5) * 5;
+                return Math.max(0, totalLoad);
+            }
+
+            // Unique Feature 2: Weather-Adaptive Solar Generation
+            generateSolarPower(hour) {
+                if (hour < 6 || hour > 18) return 0;
+
+                const solarCurve = Math.sin(((hour - 6) / 12) * Math.PI);
+                let solarPower = this.config.solarCapacity * solarCurve;
+
+                // Weather adaptation
+                if (this.config.weatherAdaptive) {
+                    const cloudFactor = 1 - (this.config.cloudCover / 100) * 0.7;
+                    const temperatureFactor = 0.95 + Math.random() * 0.1;
+                    solarPower *= cloudFactor * temperatureFactor;
+                }
+
+                return Math.max(0, solarPower);
+            }
+
+            // Unique Feature 3: Wind Power with Turbulence Modeling
+            generateWindPower(hour) {
+                const windPattern = 5 + 4 * Math.sin((hour - 3) * Math.PI / 12) + 3 * Math.cos(hour * Math.PI / 6);
+                const actualWind = this.config.windSpeed * (0.8 + Math.random() * 0.4);
+                
+                // Wind turbine power curve (simplified cubic relationship with cut-in and cut-out)
+                let windPower = 0;
+                if (actualWind >= 3 && actualWind <= 25) {
+                    windPower = this.config.windCapacity * Math.min(1, Math.pow((actualWind - 3) / 10, 3));
+                }
+
+                return Math.max(0, windPower);
+            }
+
+            // Unique Feature 4: Dynamic Pricing with ToU (Time of Use) and Real-time Grid Conditions
+            getGridPrice(hour, type = 'buy') {
+                const basePrice = type === 'buy' ? this.config.gridBuyPrice : this.config.gridSellPrice;
+                
+                // Peak hours: 7-9 AM, 5-8 PM
+                const isPeak = (hour >= 7 && hour <= 9) || (hour >= 17 && hour <= 20);
+                const peakFactor = isPeak ? this.config.peakMultiplier : 1.0;
+                
+                // Off-peak discount: 11 PM - 5 AM
+                const isOffPeak = hour >= 23 || hour <= 5;
+                const offPeakFactor = isOffPeak ? 0.6 : 1.0;
+                
+                // Grid congestion factor (simulated)
+                const congestionFactor = 1 + 0.2 * Math.sin(hour * Math.PI / 12);
+                
+                return basePrice * peakFactor * offPeakFactor * congestionFactor;
+            }
+
+            // Unique Feature 5: Intelligent Load Shifting Algorithm
+            optimizeLoadShifting(schedule) {
+                if (!this.config.loadShifting) return schedule;
+
+                const shiftableLoad = schedule.map(h => h.load * 0.25); // 25% of load is shiftable
+                const newSchedule = JSON.parse(JSON.stringify(schedule));
+
+                // Identify low-cost hours
+                const costRanking = schedule.map((h, i) => ({hour: i, cost: h.gridBuyPrice}))
+                    .sort((a, b) => a.cost - b.cost);
+
+                // Shift load from expensive to cheap hours
+                for (let i = 0; i < 6; i++) {
+                    const fromHour = costRanking[costRanking.length - 1 - i].hour;
+                    const toHour = costRanking[i].hour;
+                    
+                    const shiftAmount = Math.min(shiftableLoad[fromHour], 8);
+                    newSchedule[fromHour].load -= shiftAmount;
+                    newSchedule[toHour].load += shiftAmount;
+                }
+
+                return newSchedule;
+            }
+
+            // Unique Feature 6: Carbon Emission Optimization
+            calculateCarbonEmissions(gridPower) {
+                // Grid carbon intensity varies by time (coal at night, renewable during day)
+                const baseIntensity = 0.5; // kg CO2/kWh
+                const renewableMix = 0.3 + 0.3 * Math.sin((new Date().getHours() - 12) * Math.PI / 12);
+                const carbonIntensity = baseIntensity * (1 - renewableMix);
+                return gridPower * carbonIntensity;
+            }
+
+            // Core Optimization Engine
+            optimize() {
+                let schedule = [];
+                let batterySOC = this.config.initialSOC / 100 * this.config.batteryCapacity;
+                let totalCost = 0;
+                let totalCarbonSaved = 0;
+
+                for (let hour = 0; hour < this.hours; hour++) {
+                    const load = this.predictLoad(hour);
+                    const solar = this.generateSolarPower(hour);
+                    const wind = this.generateWindPower(hour);
+                    const renewableGeneration = solar + wind;
+                    
+                    const gridBuyPrice = this.getGridPrice(hour, 'buy');
+                    const gridSellPrice = this.getGridPrice(hour, 'sell');
+
+                    let netLoad = load - renewableGeneration;
+                    let batteryCharge = 0;
+                    let batteryDischarge = 0;
+                    let gridPurchase = 0;
+                    let gridSale = 0;
+                    let hourlyCost = 0;
+
+                    // Battery management strategy
+                    const maxChargeRate = this.config.batteryCapacity * 0.25;
+                    const maxDischargeRate = this.config.batteryCapacity * 0.25;
+
+                    if (netLoad < 0) {
+                        // Surplus energy
+                        const surplus = -netLoad;
+                        const batteryRoom = this.config.batteryCapacity - batterySOC;
+                        
+                        // Charge battery first
+                        batteryCharge = Math.min(surplus, batteryRoom, maxChargeRate);
+                        batterySOC += batteryCharge;
+                        
+                        // Sell remaining to grid
+                        gridSale = surplus - batteryCharge;
+                        hourlyCost = -gridSale * gridSellPrice;
+                    } else {
+                        // Deficit - need to source energy
+                        // Priority: Battery (if cheap hour) or Grid (based on price)
+                        const batteryAvailable = Math.min(batterySOC * 0.9, maxDischargeRate);
+                        
+                        // Decision logic based on grid price
+                        if (gridBuyPrice > this.config.gridBuyPrice * 1.5 && batteryAvailable > 0) {
+                            // Expensive hour - use battery
+                            batteryDischarge = Math.min(netLoad, batteryAvailable);
+                            batterySOC -= batteryDischarge;
+                            netLoad -= batteryDischarge;
+                        }
+                        
+                        // Buy remaining from grid
+                        if (netLoad > 0) {
+                            gridPurchase = netLoad;
+                            hourlyCost = gridPurchase * gridBuyPrice;
+                        }
+
+                        // If cheap hour and battery not full, buy extra for battery
+                        if (gridBuyPrice < this.config.gridBuyPrice * 0.7) {
+                            const batteryRoom = this.config.batteryCapacity - batterySOC;
+                            const extraPurchase = Math.min(batteryRoom, maxChargeRate);
+                            batteryCharge = extraPurchase;
+                            batterySOC += batteryCharge;
+                            hourlyCost += extraPurchase * gridBuyPrice;
+                        }
+                    }
+
+                    // Carbon calculation
+                    const carbonEmissions = this.calculateCarbonEmissions(gridPurchase);
+                    const carbonSaved = this.calculateCarbonEmissions(load) - carbonEmissions;
+                    totalCarbonSaved += carbonSaved;
+
+                    totalCost += hourlyCost;
+
+                    schedule.push({
+                        hour,
+                        load,
+                        solar,
+                        wind,
+                        renewableGeneration,
+                        batteryCharge,
+                        batteryDischarge,
+                        batterySOC,
+                        gridPurchase,
+                        gridSale,
+                        gridBuyPrice,
+                        gridSellPrice,
+                        hourlyCost,
+                        carbonEmissions,
+                        carbonSaved
+                    });
+                }
+
+                // Apply load shifting optimization
+                schedule = this.optimizeLoadShifting(schedule);
+
+                return {
+                    schedule,
+                    totalCost,
+                    totalCarbonSaved,
+                    averageSOC: schedule.reduce((sum, h) => sum + h.batterySOC, 0) / this.hours,
+                    renewablePercentage: (schedule.reduce((sum, h) => sum + h.renewableGeneration, 0) / 
+                                         schedule.reduce((sum, h) => sum + h.load, 0)) * 100
+                };
+            }
+        }
+
+        function runSimulation() {
+            const config = {
+                solarCapacity: parseFloat(document.getElementById('solarCapacity').value),
+                windCapacity: parseFloat(document.getElementById('windCapacity').value),
+                batteryCapacity: parseFloat(document.getElementById('batteryCapacity').value),
+                initialSOC: parseFloat(document.getElementById('initialSOC').value),
+                gridBuyPrice: parseFloat(document.getElementById('gridBuyPrice').value),
+                gridSellPrice: parseFloat(document.getElementById('gridSellPrice').value),
+                peakMultiplier: parseFloat(document.getElementById('peakMultiplier').value),
+                cloudCover: parseFloat(document.getElementById('cloudCover').value),
+                windSpeed: parseFloat(document.getElementById('windSpeed').value),
+                aiPrediction: document.getElementById('aiPrediction').checked,
+                weatherAdaptive: document.getElementById('weatherAdaptive').checked,
+                loadShifting: document.getElementById('loadShifting').checked,
+                carbonMode: document.getElementById('carbonMode').checked
+            };
+
+            const simulator = new MicrogridSimulator(config);
+            const results = simulator.optimize();
+
+            displayResults(results);
+        }
+
+        function displayResults(results) {
+            const { schedule, totalCost, totalCarbonSaved, averageSOC, renewablePercentage } = results;
+
+            // Status message
+            document.getElementById('statusMessage').innerHTML = `
+                <div class="alert alert-success">
+                    <span class="status-indicator active"></span>
+                    <strong>Optimization Complete!</strong> Advanced scheduling generated for 24-hour period.
+                </div>
+            `;
+
+            // Statistics cards
+            const totalEnergy = schedule.reduce((sum, h) => sum + h.load, 0);
+            const totalRenewable = schedule.reduce((sum, h) => sum + h.renewableGeneration, 0);
+            const totalGridPurchase = schedule.reduce((sum, h) => sum + h.gridPurchase, 0);
+            const totalGridSale = schedule.reduce((sum, h) => sum + h.gridSale, 0);
+            const netGridEnergy = totalGridPurchase - totalGridSale;
+            const costSavings = (totalEnergy * 0.15) - totalCost; // vs baseline
+
+            document.getElementById('statsGrid').innerHTML = `
+                <div class="stat-card">
+                    <h4>Total Energy Consumption</h4>
+                    <div class="value">${totalEnergy.toFixed(1)}</div>
+                    <div class="unit">kWh</div>
+                </div>
+                <div class="stat-card">
+                    <h4>Operational Cost</h4>
+                    <div class="value">$${Math.abs(totalCost).toFixed(2)}</div>
+                    <div class="unit">${totalCost < 0 ? 'Revenue' : 'Cost'}</div>
+                </div>
+                <div class="stat-card">
+                    <h4>Renewable Energy %</h4>
+                    <div class="value">${renewablePercentage.toFixed(1)}</div>
+                    <div class="unit">%</div>
+                </div>
+                <div class="stat-card">
+                    <h4>Carbon Saved</h4>
+                    <div class="value">${totalCarbonSaved.toFixed(1)}</div>
+                    <div class="unit">kg CO₂</div>
+                </div>
+                <div class="stat-card">
+                    <h4>Cost Savings</h4>
+                    <div class="value">$${costSavings.toFixed(2)}</div>
+                    <div class="unit">vs Baseline</div>
+                </div>
+                <div class="stat-card">
+                    <h4>Grid Independence</h4>
+                    <div class="value">${((1 - netGridEnergy/totalEnergy) * 100).toFixed(1)}</div>
+                    <div class="unit">%</div>
+                </div>
+            `;
+
+            // Energy Flow Chart
+            const hours = schedule.map(h => `${h.hour}:00`);
+            const energyFlowData = [
+                {
+                    x: hours,
+                    y: schedule.map(h => h.load),
+                    name: 'Load Demand',
+                    type: 'scatter',
+                    mode: 'lines',
+                    line: { color: '#e74c3c', width: 3 }
+                },
+                {
+                    x: hours,
+                    y: schedule.map(h => h.solar),
+                    name: 'Solar Generation',
+                    type: 'scatter',
+                    mode: 'lines',
+                    fill: 'tozeroy',
+                    line: { color: '#f39c12', width: 2 }
+                },
+                {
+                    x: hours,
+                    y: schedule.map(h => h.wind),
+                    name: 'Wind Generation',
+                    type: 'scatter',
+                    mode: 'lines',
+                    fill: 'tozeroy',
+                    line: { color: '#3498db', width: 2 }
+                },
+                {
+                    x: hours,
+                    y: schedule.map(h => h.gridPurchase),
+                    name: 'Grid Purchase',
+                    type: 'scatter',
+                    mode: 'lines',
+                    line: { color: '#e67e22', width: 2, dash: 'dot' }
+                }
+            ];
+
+            Plotly.newPlot('energyFlowChart', energyFlowData, {
+                height: 400,
+                margin: { t: 20, r: 20, b: 50, l: 60 },
+                xaxis: { title: 'Hour of Day' },
+                yaxis: { title: 'Power (kW)' },
+                legend: { orientation: 'h', y: -0.2 }
+            });
+
+            // Battery & Grid Chart
+            const batteryData = [
+                {
+                    x: hours,
+                    y: schedule.map(h => (h.batterySOC / parseFloat(document.getElementById('batteryCapacity').value)) * 100),
+                    name: 'Battery SOC (%)',
+                    type: 'scatter',
+                    mode: 'lines',
+                    line: { color: '#27ae60', width: 3 },
+                    yaxis: 'y'
+                },
+                {
+                    x: hours,
+                    y: schedule.map(h => h.batteryCharge),
+                    name: 'Battery Charging',
+                    type: 'bar',
+                    marker: { color: '#2ecc71' },
+                    yaxis: 'y2'
+                },
+                {
+                    x: hours,
+                    y: schedule.map(h => -h.batteryDischarge),
+                    name: 'Battery Discharging',
+                    type: 'bar',
+                    marker: { color: '#e74c3c' },
+                    yaxis: 'y2'
+                }
+            ];
+
+            Plotly.newPlot('batteryChart', batteryData, {
+                height: 400,
+                margin: { t: 20, r: 60, b: 50, l: 60 },
+                xaxis: { title: 'Hour of Day' },
+                yaxis: { title: 'State of Charge (%)', side: 'left' },
+                yaxis2: { title: 'Power (kW)', overlaying: 'y', side: 'right' },
+                legend: { orientation: 'h', y: -0.2 },
+                barmode: 'relative'
+            });
+
+            // Cost Analysis Chart
+            const costData = [
+                {
+                    x: hours,
+                    y: schedule.map(h => h.hourlyCost),
+                    name: 'Hourly Cost',
+                    type: 'bar',
+                    marker: { 
+                        color: schedule.map(h => h.hourlyCost >= 0 ? '#e74c3c' : '#27ae60')
+                    }
+                },
+                {
+                    x: hours,
+                    y: schedule.map(h => h.gridBuyPrice * 100),
+                    name: 'Grid Buy Price (¢/kWh)',
+                    type: 'scatter',
+                    mode: 'lines',
+                    line: { color: '#9b59b6', width: 2 },
+                    yaxis: 'y2'
+                }
+            ];
+
+            Plotly.newPlot('costChart', costData, {
+                height: 400,
+                margin: { t: 20, r: 60, b: 50, l: 60 },
+                xaxis: { title: 'Hour of Day' },
+                yaxis: { title: 'Cost ($)' },
+                yaxis2: { title: 'Price (¢/kWh)', overlaying: 'y', side: 'right' },
+                legend: { orientation: 'h', y: -0.2 }
+            });
+
+            // Schedule Table
+            let tableHTML = `
+                <table class="schedule-table">
+                    <thead>
+                        <tr>
+                            <th>Hour</th>
+                            <th>Load (kW)</th>
+                            <th>Solar (kW)</th>
+                            <th>Wind (kW)</th>
+                            <th>Battery (kWh)</th>
+                            <th>Grid (kW)</th>
+                            <th>Cost ($)</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            schedule.forEach(h => {
+                const action = h.batteryCharge > 0 ? '⚡ Charging' : 
+                              h.batteryDischarge > 0 ? '🔋 Discharging' :
+                              h.gridSale > 0 ? '💰 Selling' : '📥 Buying';
+                
+                tableHTML += `
+                    <tr>
+                        <td>${h.hour}:00</td>
+                        <td>${h.load.toFixed(1)}</td>
+                        <td>${h.solar.toFixed(1)}</td>
+                        <td>${h.wind.toFixed(1)}</td>
+                        <td>${h.batterySOC.toFixed(1)}</td>
+                        <td>${(h.gridPurchase - h.gridSale).toFixed(1)}</td>
+                        <td>${h.hourlyCost.toFixed(2)}</td>
+                        <td>${action}</td>
+                    </tr>
+                `;
+            });
+
+            tableHTML += `</tbody></table>`;
+            document.getElementById('scheduleTable').innerHTML = tableHTML;
+
+            // Store results globally for export
+            window.currentResults = results;
+        }
+
+        function exportSchedule() {
+            if (!window.currentResults) {
+                alert('Please run optimization first!');
+                return;
+            }
+
+            const { schedule } = window.currentResults;
+            let csv = 'Hour,Load(kW),Solar(kW),Wind(kW),Battery_SOC(kWh),Battery_Charge(kW),Battery_Discharge(kW),Grid_Purchase(kW),Grid_Sale(kW),Cost($),Carbon_Saved(kg)\n';
+            
+            schedule.forEach(h => {
+                csv += `${h.hour},${h.load.toFixed(2)},${h.solar.toFixed(2)},${h.wind.toFixed(2)},${h.batterySOC.toFixed(2)},${h.batteryCharge.toFixed(2)},${h.batteryDischarge.toFixed(2)},${h.gridPurchase.toFixed(2)},${h.gridSale.toFixed(2)},${h.hourlyCost.toFixed(2)},${h.carbonSaved.toFixed(2)}\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'microgrid_schedule.csv';
+            a.click();
+        }
+
+        // Run initial simulation on load
+        window.addEventListener('load', () => {
+            setTimeout(runSimulation, 500);
+        });
+    </script>
+</body>
+</html>

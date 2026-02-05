@@ -48,6 +48,8 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
         currentParticles: { mesh: THREE.Points; path: THREE.Vector3[]; curve: THREE.CatmullRomCurve3; speed: number; active: boolean }[];
         animationId: number;
         time: number;
+        targetData: Microgrid3DSceneProps['currentData'];
+        smoothedData: { hour: number; battery_soc: number; solar_intensity: number };
     } | null>(null);
 
     // Initial Scene Setup (Runs Once)
@@ -205,20 +207,20 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
 
         scene.add(moon);
 
-        // Moon label
-        const moonLabel = createLabel("🌙 MOON", 0xe0e0e0);
-        moonLabel.position.set(0, 0, 0); // Will be updated in animation loop
-        // Attach label to moon group so it moves with it? 
-        // Better to update position in loop to keep upright or just leave static off-screen initially
-        // Actually, let's just add it to scene and update pos in loop
-        scene.add(moonLabel);
-        // We'll store the label in the moon group for easier access if we wanted, 
-        // but for now let's make it a child of the moon group but counter-rotated? 
-        // Simplest is to just let the moon be the visual.
-        // Actually, the user just asked for a moon, labels are extra.
-        // I won't add a label to sceneRef for the moon specifically to keep types simple 
-        // unless I change the type definition again.
-        // Let's just stick to the visual moon for now.
+        // // Moon label
+        // const moonLabel = createLabel("🌙 MOON", 0xe0e0e0);
+        // moonLabel.position.set(0, 0, 0); // Will be updated in animation loop
+        // // Attach label to moon group so it moves with it? 
+        // // Better to update position in loop to keep upright or just leave static off-screen initially
+        // // Actually, let's just add it to scene and update pos in loop
+        // scene.add(moonLabel);
+        // // We'll store the label in the moon group for easier access if we wanted, 
+        // // but for now let's make it a child of the moon group but counter-rotated? 
+        // // Simplest is to just let the moon be the visual.
+        // // Actually, the user just asked for a moon, labels are extra.
+        // // I won't add a label to sceneRef for the moon specifically to keep types simple 
+        // // unless I change the type definition again.
+        // // Let's just stick to the visual moon for now.
 
         // ========================================
         // SOLAR PANEL - Realistic with frame and cells
@@ -557,6 +559,12 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
             currentParticles,
             animationId: 0,
             time: 0,
+            targetData: currentData,
+            smoothedData: {
+                hour: currentData.hour,
+                battery_soc: currentData.battery_soc / 100,
+                solar_intensity: currentData.solar_generation / 7
+            },
         };
 
         // ========================================
@@ -567,6 +575,133 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
             sceneRef.current.animationId = requestAnimationFrame(animate);
             sceneRef.current.time += 0.016;
             const time = sceneRef.current.time;
+
+            // ===========================
+            // SMOOTH INTERPOLATION LOGIC
+            // ===========================
+            const target = sceneRef.current.targetData;
+            const smoothed = sceneRef.current.smoothedData;
+            const smoothingSpeed = 0.05; // Adjust for smoothness vs responsiveness
+
+            // Lerp Hour
+            // Handle restart (e.g. going from 23 back to 0) -> snap
+            if (Math.abs(target.hour - smoothed.hour) > 12) {
+                smoothed.hour = target.hour;
+            } else {
+                smoothed.hour += (target.hour - smoothed.hour) * smoothingSpeed;
+            }
+
+            // Lerp numeric values
+            smoothed.battery_soc += ((target.battery_soc / 100) - smoothed.battery_soc) * smoothingSpeed;
+            smoothed.solar_intensity += ((target.solar_generation / 7) - smoothed.solar_intensity) * smoothingSpeed;
+
+            // Use smoothed values for visuals
+            const hour = smoothed.hour;
+            const batterySoC = smoothed.battery_soc;
+
+            // ========================================
+            // DAY/NIGHT CYCLE (Moved from useEffect)
+            // ========================================
+            const sunProgress = Math.max(0, Math.min(1, (hour - 5) / 14));
+            const sunAngle = sunProgress * Math.PI;
+
+            // Sun position
+            const sunHeight = Math.sin(sunAngle) * 16;
+            const sunX = Math.cos(sunAngle) * 22 - 2;
+            sun.position.set(sunX, Math.max(sunHeight, -10), -8);
+            sunLight.position.set(sunX, Math.max(sunHeight + 2, 1), -5);
+
+            // Moon Logic (Smoothed)
+            let moonProgress = 0;
+            let moonVisible = false;
+            // Normalize moon time: 18->0, 6->1
+            if (hour >= 18) {
+                moonProgress = (hour - 18) / 12;
+                moonVisible = true;
+            } else if (hour <= 6) {
+                moonProgress = (hour + 6) / 12;
+                moonVisible = true;
+            }
+
+            if (moonVisible) {
+                const moonAngle = moonProgress * Math.PI;
+                const moonHeight = Math.sin(moonAngle) * 15;
+                const moonX = Math.cos(moonAngle) * 22 - 2;
+                moon.position.set(moonX, Math.max(moonHeight, -10), -8);
+                moon.visible = true;
+            } else {
+                moon.visible = false;
+            }
+
+            // Sky/Light Colors
+            const isDawn = hour >= 5 && hour < 7;
+            const isDusk = hour >= 17 && hour < 20;
+            const isNight = hour < 5 || hour >= 20;
+
+            let skyColor = new THREE.Color();
+            let fogColor = new THREE.Color();
+            let ambientIntensity = 0;
+            let sunIntensity = 0;
+            let hemiSkyColor = new THREE.Color();
+
+            if (isNight) {
+                skyColor.setHex(0x050510);
+                fogColor.setHex(0x050510);
+                ambientIntensity = 0.2;
+                sunIntensity = 0;
+                hemiSkyColor.setHex(0x0a0a20);
+            } else if (isDawn) {
+                const t = (hour - 5) / 2;
+                skyColor.lerpColors(new THREE.Color(0x1a1a3a), new THREE.Color(0xffaa66), t);
+                fogColor.copy(skyColor);
+                ambientIntensity = 0.2 + t * 0.3;
+                sunIntensity = t * 1.2;
+                hemiSkyColor.lerpColors(new THREE.Color(0x222244), new THREE.Color(0xffcc88), t);
+            } else if (isDusk) {
+                const t = (hour - 17) / 3;
+                skyColor.lerpColors(new THREE.Color(0xffaa66), new THREE.Color(0x1a1a3a), t);
+                fogColor.copy(skyColor);
+                ambientIntensity = 0.5 - t * 0.35;
+                sunIntensity = 1.5 - t * 1.5;
+                hemiSkyColor.lerpColors(new THREE.Color(0xff8866), new THREE.Color(0x222244), t);
+            } else {
+                const noonProximity = 1 - Math.abs(hour - 12) / 6;
+                skyColor.lerpColors(new THREE.Color(0x6bb3e0), new THREE.Color(0x87ceeb), noonProximity);
+                fogColor.copy(skyColor);
+                ambientIntensity = 0.4 + noonProximity * 0.2;
+                sunIntensity = 1.0 + noonProximity * 0.5;
+                hemiSkyColor.setHex(0x87ceeb);
+            }
+
+            scene.background = skyColor;
+            (scene.fog as THREE.FogExp2).color = fogColor;
+            ambientLight.intensity = ambientIntensity;
+            sunLight.intensity = sunIntensity;
+            hemiLight.color = hemiSkyColor;
+            hemiLight.intensity = ambientIntensity * 1.2;
+
+            // Sun vis
+            sun.visible = hour >= 5 && hour <= 19 && sunHeight > -2;
+
+            // Battery Level
+            batteryLevel.scale.y = Math.max(0.1, batterySoC);
+            batteryLevel.position.y = 0.35 + batterySoC * 0.75;
+
+            let batteryColor = 0x22c55e;
+            if (batterySoC < 0.3) batteryColor = 0xef4444;
+            else if (batterySoC < 0.6) batteryColor = 0xeab308;
+            (batteryLevel.material as THREE.MeshBasicMaterial).color.setHex(batteryColor);
+
+            // Particles Activity (using strictly target data for logical switches to avoid flickering)
+            const isCharging = target.battery_charge > 0;
+            const isDischarging = target.battery_discharge > 0;
+            const gridActive = target.grid_usage > 0.1;
+            const isDaytime = hour >= 6 && hour <= 18;
+
+            currentParticles[0].active = isDaytime && smoothed.solar_intensity > 0.1 && isCharging;
+            currentParticles[1].active = isDischarging;
+            currentParticles[2].active = gridActive;
+
 
             // Rotate sun glow
             sun.rotation.y = time * 0.1;
@@ -619,164 +754,20 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
         };
     }, []);
 
-    // Update scene based on currentData - including day/night cycle
+    // Sync currentData to ref for animation loop
+    useEffect(() => {
+        if (sceneRef.current) {
+            sceneRef.current.targetData = currentData;
+        }
+    }, [currentData]);
+
+    // PREVIOUS Update scene - REMOVED (logic moved to animate loop)
+    /*
     useEffect(() => {
         if (!sceneRef.current) return;
-
-        const { scene, sun, moon, sunLight, ambientLight, hemiLight, batteryLevel, currentParticles } = sceneRef.current;
-        const hour = currentData.hour;
-        const batterySoC = currentData.battery_soc / 100;
-
-        // ========================================
-        // DAY/NIGHT CYCLE
-        // ========================================
-        // Calculate sun position and lighting based on hour
-        // Sunrise: 6am, Noon: 12pm, Sunset: 18pm
-        const sunProgress = Math.max(0, Math.min(1, (hour - 5) / 14)); // 5am to 7pm range
-        const sunAngle = sunProgress * Math.PI; // 0 to PI for sun arc
-
-        // Sun position in sky (arc from east to west)
-        // Adjusted to go wider (more left) to avoid crashing into the ground mesh at sunset
-        const sunHeight = Math.sin(sunAngle) * 16; // Slightly higher arc
-        const sunX = Math.cos(sunAngle) * 22 - 2; // Wider arc: Starts at 20 (Right), Ends at -24 (Left of ground edge)
-        sun.position.set(sunX, Math.max(sunHeight, -10), -8);
-        sunLight.position.set(sunX, Math.max(sunHeight + 2, 1), -5);
-
-        // Moon Position (Approximate opposite of Sun + offset logic)
-        // Moon is visible roughly 18:00 to 06:00
-        let moonVisible = false;
-
-        // Normalize moon time: 18->0, 24/0->0.5, 6->1
-        let moonProgress = 0;
-        if (hour >= 18) {
-            moonProgress = (hour - 18) / 12; // 0 to 0.5
-            moonVisible = true;
-        } else if (hour <= 6) {
-            moonProgress = (hour + 6) / 12; // 0.5 to 1
-            moonVisible = true;
-        }
-
-        if (moonVisible) {
-            const moonAngle = moonProgress * Math.PI;
-            const moonHeight = Math.sin(moonAngle) * 15;
-            // Moon follows similar East->West path
-            const moonX = Math.cos(moonAngle) * 22 - 2;
-            moon.position.set(moonX, Math.max(moonHeight, -10), -8);
-            moon.visible = true;
-        } else {
-            moon.visible = false;
-        }
-
-        // Determine time of day
-        const isDaytime = hour >= 6 && hour <= 18;
-        const isDawn = hour >= 5 && hour < 7;
-        const isDusk = hour >= 17 && hour < 20;
-        const isNight = hour < 5 || hour >= 20;
-
-        // Sky colors for different times
-        let skyColor: THREE.Color;
-        let fogColor: THREE.Color;
-        let ambientIntensity: number;
-        let sunIntensity: number;
-        let hemiSkyColor: THREE.Color;
-        let hemiGroundColor: THREE.Color;
-
-        if (isNight) {
-            // Night - truly dark/black sky
-            skyColor = new THREE.Color(0x050510); // Slightly non-black for depth, or 0x000000
-            fogColor = new THREE.Color(0x050510);
-            ambientIntensity = 0.2; // Slightly brighter ambient to see houses
-            sunIntensity = 0;
-            hemiSkyColor = new THREE.Color(0x0a0a20);
-            hemiGroundColor = new THREE.Color(0x050505);
-        } else if (isDawn) {
-            // Dawn - orange/pink gradient
-            const t = (hour - 5) / 2; // 0 to 1 during dawn
-            skyColor = new THREE.Color().lerpColors(
-                new THREE.Color(0x1a1a3a),
-                new THREE.Color(0xffaa66),
-                t
-            );
-            fogColor = skyColor.clone();
-            ambientIntensity = 0.2 + t * 0.3;
-            sunIntensity = t * 1.2;
-            hemiSkyColor = new THREE.Color().lerpColors(
-                new THREE.Color(0x222244),
-                new THREE.Color(0xffcc88),
-                t
-            );
-            hemiGroundColor = new THREE.Color(0x3d4c4c);
-        } else if (isDusk) {
-            // Dusk - orange/purple gradient
-            const t = (hour - 17) / 3; // 0 to 1 during dusk
-            skyColor = new THREE.Color().lerpColors(
-                new THREE.Color(0xffaa66),
-                new THREE.Color(0x1a1a3a),
-                t
-            );
-            fogColor = skyColor.clone();
-            ambientIntensity = 0.5 - t * 0.35;
-            sunIntensity = 1.5 - t * 1.5;
-            hemiSkyColor = new THREE.Color().lerpColors(
-                new THREE.Color(0xff8866),
-                new THREE.Color(0x222244),
-                t
-            );
-            hemiGroundColor = new THREE.Color(0x3d4c4c);
-        } else {
-            // Daytime - blue sky
-            const noonProximity = 1 - Math.abs(hour - 12) / 6; // Peak at noon
-            skyColor = new THREE.Color().lerpColors(
-                new THREE.Color(0x6bb3e0),
-                new THREE.Color(0x87ceeb),
-                noonProximity
-            );
-            fogColor = skyColor.clone();
-            ambientIntensity = 0.4 + noonProximity * 0.2;
-            sunIntensity = 1.0 + noonProximity * 0.5;
-            hemiSkyColor = new THREE.Color(0x87ceeb);
-            hemiGroundColor = new THREE.Color(0x4a6a4a);
-        }
-
-        // Apply sky/lighting changes
-        scene.background = skyColor;
-        if (scene.fog instanceof THREE.FogExp2) {
-            scene.fog.color = fogColor;
-        }
-        ambientLight.intensity = ambientIntensity;
-        sunLight.intensity = sunIntensity;
-        sunLight.color.setHex(isDusk || isDawn ? 0xffaa66 : 0xffffee);
-        hemiLight.color = hemiSkyColor;
-        hemiLight.groundColor = hemiGroundColor;
-        hemiLight.intensity = ambientIntensity * 1.2;
-
-        // Sun visibility (hide below horizon)
-        sun.visible = hour >= 5 && hour <= 19 && sunHeight > -2;
-
-        // Update battery level
-        batteryLevel.scale.y = Math.max(0.1, batterySoC);
-        batteryLevel.position.y = 0.35 + batterySoC * 0.75;
-
-        // Battery color based on SoC
-        let batteryColor = 0x22c55e; // Green
-        if (batterySoC < 0.3) batteryColor = 0xef4444; // Red
-        else if (batterySoC < 0.6) batteryColor = 0xeab308; // Yellow
-        (batteryLevel.material as THREE.MeshBasicMaterial).color.setHex(batteryColor);
-
-        // Activate current flows based on simulation data
-        const solarIntensity = currentData.solar_generation / 7;
-        const isCharging = currentData.battery_charge > 0;
-        const isDischarging = currentData.battery_discharge > 0;
-        const gridActive = currentData.grid_usage > 0.1;
-
-        // Solar to Battery (when solar is generating and battery is charging)
-        currentParticles[0].active = isDaytime && solarIntensity > 0.1 && isCharging;
-        // Battery to House (when battery is discharging)
-        currentParticles[1].active = isDischarging;
-        // Grid to House (when grid is being used)
-        currentParticles[2].active = gridActive;
-
+        // ... (Logic moved to animate)
     }, [currentData]);
+    */
 
     return (
         <div
