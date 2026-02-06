@@ -21,7 +21,7 @@ import FeedbackTab from "./FeedbackTab";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://microgrid-simulation.onrender.com";
 
 // Simulation steps for the procedure
 const PROCEDURE_STEPS = [
