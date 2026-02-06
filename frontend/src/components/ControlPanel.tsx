@@ -44,6 +44,33 @@ export default function ControlPanel({
             </div>
 
             <div className="space-y-6">
+                {/* Action Buttons */}
+                <div className="flex gap-3">
+                    <button
+                        onClick={onSimulate}
+                        disabled={isLoading}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 disabled:from-slate-600 disabled:to-slate-700 text-white font-semibold rounded-xl transition-all duration-300 shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 disabled:shadow-none"
+                    >
+                        {isLoading ? (
+                            <>
+                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                Simulating...
+                            </>
+                        ) : (
+                            <>
+                                <Play className="w-5 h-5" />
+                                Run Simulation
+                            </>
+                        )}
+                    </button>
+                    <button
+                        onClick={onReset}
+                        className="px-4 py-3 bg-slate-700 hover:bg-slate-600 text-slate-300 font-medium rounded-xl transition-all duration-300"
+                    >
+                        <RotateCcw className="w-5 h-5" />
+                    </button>
+                </div>
+
                 {/* Battery Capacity Slider */}
                 <div className="space-y-3">
                     <div className="flex items-center justify-between">
@@ -110,33 +137,6 @@ export default function ControlPanel({
                         />
                     </div>
                     <p className="text-xs text-slate-500">Night & early morning hours</p>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex gap-3 pt-4">
-                    <button
-                        onClick={onSimulate}
-                        disabled={isLoading}
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 disabled:from-slate-600 disabled:to-slate-700 text-white font-semibold rounded-xl transition-all duration-300 shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 disabled:shadow-none"
-                    >
-                        {isLoading ? (
-                            <>
-                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                Simulating...
-                            </>
-                        ) : (
-                            <>
-                                <Play className="w-5 h-5" />
-                                Run Simulation
-                            </>
-                        )}
-                    </button>
-                    <button
-                        onClick={onReset}
-                        className="px-4 py-3 bg-slate-700 hover:bg-slate-600 text-slate-300 font-medium rounded-xl transition-all duration-300"
-                    >
-                        <RotateCcw className="w-5 h-5" />
-                    </button>
                 </div>
             </div>
         </div>

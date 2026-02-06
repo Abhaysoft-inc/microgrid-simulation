@@ -14,7 +14,7 @@
 
 import React, { useState, useCallback, useEffect } from "react";
 import Joyride, { CallBackProps, STATUS, Step } from 'react-joyride';
-import { Play, Pause, RotateCcw, ChevronLeft, ChevronRight, Sun, Battery, Home, Zap, Settings, BarChart3, BookOpen, FlaskConical, CheckSquare, FileText, CheckCircle2, XCircle, LayoutList, Lightbulb, HelpCircle, X, Award, Leaf, TrendingUp, Target, AlertTriangle, CloudRain, BatteryWarning, MessageSquare } from "lucide-react";
+import { Play, Pause, RotateCcw, ChevronLeft, ChevronRight, Sun, Battery, Home, Zap, Settings, BarChart3, BookOpen, FlaskConical, CheckSquare, FileText, CheckCircle2, XCircle, LayoutList, Lightbulb, HelpCircle, X, Award, Leaf, TrendingUp, Target, AlertTriangle, CloudRain, BatteryWarning, MessageSquare, MoreVertical } from "lucide-react";
 import Microgrid3DScene from "./Microgrid3DScene";
 import EnergyFlowD3 from "./EnergyFlowD3";
 import FeedbackTab from "./FeedbackTab";
@@ -121,10 +121,10 @@ export default function VLabsSimulation() {
     const [reportCardShown, setReportCardShown] = useState(false); // Track if report was already shown for this run
 
     // Collapsible panels state
-    const [isEnergyFlowExpanded, setIsEnergyFlowExpanded] = useState(true);
-    const [isBillExpanded, setIsBillExpanded] = useState(true);
-    const [isBatteryExpanded, setIsBatteryExpanded] = useState(true);
-    const [isCostEfficiencyExpanded, setIsCostEfficiencyExpanded] = useState(true);
+    const [isEnergyFlowExpanded, setIsEnergyFlowExpanded] = useState(false);
+    const [isBillExpanded, setIsBillExpanded] = useState(false);
+    const [isBatteryExpanded, setIsBatteryExpanded] = useState(false);
+    const [isCostEfficiencyExpanded, setIsCostEfficiencyExpanded] = useState(false);
 
     // Challenge/Scenario state
     const [showChallengeModal, setShowChallengeModal] = useState(false);
@@ -815,7 +815,7 @@ export default function VLabsSimulation() {
                             </div>
 
                             {/* Tips */}
-                            <div className="bg-amber-50/50 rounded-lg p-3 border border-amber-100">
+                            {/* <div className="bg-amber-50/50 rounded-lg p-3 border border-amber-100">
                                 <div className="flex items-center gap-2 text-amber-700 text-xs font-semibold mb-1">
                                     <Lightbulb className="w-3 h-3" /> Tips for Improvement
                                 </div>
@@ -827,7 +827,7 @@ export default function VLabsSimulation() {
                                         </li>
                                     ))}
                                 </ul>
-                            </div>
+                            </div> */}
                         </div>
 
                         {/* Footer */}
@@ -878,26 +878,14 @@ export default function VLabsSimulation() {
                                 <p className="text-xs text-slate-500 font-medium">Virtual Labs Experiment </p>
                             </div>
                         </div>
-                        {/* <div className="hidden md:flex items-center gap-3 text-sm">
-                            <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-md border border-slate-200 text-xs font-medium">
-                                Delhi, India
-                            </span>
-                            <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-md border border-emerald-100 flex items-center gap-1.5 text-xs font-medium">
-                                <span className="relative flex h-2 w-2">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                                </span>
-                                System Online
-                            </span>
-                        </div> */}
                     </div>
                 </div>
             </header>
 
             {/* Tab Navigation */}
             <nav className="bg-white border-b border-gray-200">
-                <div className="max-w-7xl mx-auto px-4">
-                    <div className="flex gap-1">
+                <div className="max-w-7xl mx-auto px-4 flex items-center justify-between">
+                    <div className="flex gap-1 overflow-x-auto">
                         {[
                             { id: "theory", label: "Theory", icon: BookOpen },
                             { id: "procedure", label: "Procedure", icon: Settings },
@@ -910,7 +898,7 @@ export default function VLabsSimulation() {
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id as "theory" | "procedure" | "simulation" | "analysis" | "quiz" | "references" | "feedback")}
-                                className={`flex items-center gap-2 px-6 py-3 text-sm font-medium transition-all ${activeTab === tab.id
+                                className={`flex items-center gap-2 px-6 py-3 text-sm font-medium transition-all whitespace-nowrap ${activeTab === tab.id
                                     ? "bg-blue-50 text-blue-700 border-b-2 border-blue-600"
                                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                                     }`}
@@ -920,8 +908,22 @@ export default function VLabsSimulation() {
                             </button>
                         ))}
                     </div>
+
+                    {activeTab === "simulation" && (
+                        <div className="flex items-center pl-4 border-l border-slate-200 ml-4 py-1">
+                            <VLabsToggleMenu
+                                isEnergyFlowExpanded={isEnergyFlowExpanded}
+                                setIsEnergyFlowExpanded={setIsEnergyFlowExpanded}
+                                isBillExpanded={isBillExpanded}
+                                setIsBillExpanded={setIsBillExpanded}
+                                isBatteryExpanded={isBatteryExpanded}
+                                setIsBatteryExpanded={setIsBatteryExpanded}
+                            />
+                        </div>
+                    )}
                 </div>
             </nav>
+
 
             {/* Main Content */}
             <main className="max-w-7xl mx-auto px-4 py-6">
@@ -1259,6 +1261,23 @@ export default function VLabsSimulation() {
                                     System Configuration
                                 </h3>
 
+                                {/* Run Button */}
+                                <button
+                                    id="tour-run-button"
+                                    onClick={runSimulation}
+                                    disabled={isLoading}
+                                    className="w-full mb-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:bg-slate-300 rounded-lg font-medium text-sm text-white transition-all flex items-center justify-center gap-2"
+                                >
+                                    {isLoading ? (
+                                        <>Running...</>
+                                    ) : (
+                                        <>
+                                            <Play className="w-4 h-4 fill-current" />
+                                            Run Simulation
+                                        </>
+                                    )}
+                                </button>
+
                                 <div className="space-y-4">
                                     {/* Solar Capacity */}
                                     <div>
@@ -1415,23 +1434,6 @@ export default function VLabsSimulation() {
                                         </div>
                                     </div>
                                 </div>
-
-                                {/* Run Button */}
-                                <button
-                                    id="tour-run-button"
-                                    onClick={runSimulation}
-                                    disabled={isLoading}
-                                    className="w-full mt-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:bg-slate-300 rounded-lg font-medium text-sm text-white transition-all flex items-center justify-center gap-2"
-                                >
-                                    {isLoading ? (
-                                        <>Running...</>
-                                    ) : (
-                                        <>
-                                            <Play className="w-4 h-4 fill-current" />
-                                            Run Simulation
-                                        </>
-                                    )}
-                                </button>
 
                                 {/* Challenge Mode Button */}
                                 <button
@@ -2225,6 +2227,107 @@ function ReferencesContent() {
                     </p>
                 </div>
             </div>
+        </div>
+    );
+}
+
+function VLabsToggleMenu({
+    isEnergyFlowExpanded,
+    setIsEnergyFlowExpanded,
+    isBillExpanded,
+    setIsBillExpanded,
+    isBatteryExpanded,
+    setIsBatteryExpanded,
+}: {
+    isEnergyFlowExpanded: boolean;
+    setIsEnergyFlowExpanded: (v: boolean) => void;
+    isBillExpanded: boolean;
+    setIsBillExpanded: (v: boolean) => void;
+    isBatteryExpanded: boolean;
+    setIsBatteryExpanded: (v: boolean) => void;
+}) {
+    const [isOpen, setIsOpen] = useState(false);
+
+    const allExpanded = isEnergyFlowExpanded && isBillExpanded && isBatteryExpanded;
+
+    const handleToggleAll = () => {
+        const newState = !allExpanded;
+        setIsEnergyFlowExpanded(newState);
+        setIsBillExpanded(newState);
+        setIsBatteryExpanded(newState);
+    };
+
+    return (
+        <div className="relative z-50">
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="flex items-center justify-center w-10 h-10 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 transition-all"
+                title="Toggle panel visibility"
+            >
+                <MoreVertical className="w-5 h-5" />
+            </button>
+
+            {isOpen && (
+                <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-lg shadow-xl z-50 overflow-hidden">
+                    <div className="p-2 space-y-1">
+                        <button
+                            onClick={handleToggleAll}
+                            className="w-full text-left px-3 py-2 rounded-md hover:bg-slate-50 transition-colors flex items-center gap-3 text-slate-700"
+                        >
+                            <input
+                                type="checkbox"
+                                checked={allExpanded}
+                                onChange={handleToggleAll}
+                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-sm font-medium">
+                                {allExpanded ? "Collapse All" : "Expand All"}
+                            </span>
+                        </button>
+
+                        <div className="h-px bg-slate-100 my-1" />
+
+                        <button
+                            onClick={() => setIsEnergyFlowExpanded(!isEnergyFlowExpanded)}
+                            className="w-full text-left px-3 py-2 rounded-md hover:bg-slate-50 transition-colors flex items-center gap-3 text-slate-600"
+                        >
+                            <input
+                                type="checkbox"
+                                checked={isEnergyFlowExpanded}
+                                onChange={() => setIsEnergyFlowExpanded(!isEnergyFlowExpanded)}
+                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-sm">Energy Flow</span>
+                        </button>
+
+                        <button
+                            onClick={() => setIsBillExpanded(!isBillExpanded)}
+                            className="w-full text-left px-3 py-2 rounded-md hover:bg-slate-50 transition-colors flex items-center gap-3 text-slate-600"
+                        >
+                            <input
+                                type="checkbox"
+                                checked={isBillExpanded}
+                                onChange={() => setIsBillExpanded(!isBillExpanded)}
+                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-sm">Electricity Bill</span>
+                        </button>
+
+                        <button
+                            onClick={() => setIsBatteryExpanded(!isBatteryExpanded)}
+                            className="w-full text-left px-3 py-2 rounded-md hover:bg-slate-50 transition-colors flex items-center gap-3 text-slate-600"
+                        >
+                            <input
+                                type="checkbox"
+                                checked={isBatteryExpanded}
+                                onChange={() => setIsBatteryExpanded(!isBatteryExpanded)}
+                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-sm">Battery Status</span>
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

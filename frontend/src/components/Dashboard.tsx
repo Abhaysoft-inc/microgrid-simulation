@@ -9,7 +9,8 @@
  */
 
 import React, { useState, useCallback, useEffect } from "react";
-import { Cpu, Activity, Zap } from "lucide-react";
+import { Cpu, Activity, Zap, MoreVertical } from "lucide-react";
+
 import dynamic from "next/dynamic";
 import ControlPanel from "./ControlPanel";
 import ComparisonCard from "./ComparisonCard";
@@ -72,6 +73,13 @@ export default function Dashboard() {
     // Animation state
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentHour, setCurrentHour] = useState(0);
+
+    // Card visibility state
+    const [isControlPanelVisible, setIsControlPanelVisible] = useState(true);
+    const [isMicrogridAnimationVisible, setIsMicrogridAnimationVisible] = useState(true);
+    const [isPowerGaugeVisible, setIsPowerGaugeVisible] = useState(true);
+    const [isComparisonCardVisible, setIsComparisonCardVisible] = useState(true);
+    const [isEnergyChartVisible, setIsEnergyChartVisible] = useState(true);
 
     // Animation playback effect
     useEffect(() => {
@@ -177,14 +185,27 @@ export default function Dashboard() {
                             </div>
                         </div>
 
-                        {/* Status Badge */}
-                        <div className="hidden md:flex items-center gap-3">
-                            <div className="flex items-center gap-2 px-4 py-2 bg-slate-800/50 rounded-full border border-slate-700/50">
+                        {/* Status Badge + Toggle Menu */}
+                        <div className="flex items-center gap-3">
+                            <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-800/50 rounded-full border border-slate-700/50">
                                 <div className={`w-2 h-2 rounded-full ${result ? "bg-emerald-400" : "bg-slate-500"} animate-pulse`} />
                                 <span className="text-sm text-slate-300">
                                     {result ? `Hour ${String(currentHour).padStart(2, "0")}:00` : "Ready to Simulate"}
                                 </span>
                             </div>
+                            {/* Toggle Menu */}
+                            <DashboardToggleMenu
+                                isControlPanelVisible={isControlPanelVisible}
+                                setIsControlPanelVisible={setIsControlPanelVisible}
+                                isMicrogridAnimationVisible={isMicrogridAnimationVisible}
+                                setIsMicrogridAnimationVisible={setIsMicrogridAnimationVisible}
+                                isPowerGaugeVisible={isPowerGaugeVisible}
+                                setIsPowerGaugeVisible={setIsPowerGaugeVisible}
+                                isComparisonCardVisible={isComparisonCardVisible}
+                                setIsComparisonCardVisible={setIsComparisonCardVisible}
+                                isEnergyChartVisible={isEnergyChartVisible}
+                                setIsEnergyChartVisible={setIsEnergyChartVisible}
+                            />
                         </div>
                     </div>
                 </header>
@@ -210,54 +231,70 @@ export default function Dashboard() {
                     {/* Row 1: Controls, Animation, Gauges */}
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                         {/* Controls */}
-                        <div className="lg:col-span-3">
-                            <ControlPanel
-                                batteryCapacity={batteryCapacity}
-                                setBatteryCapacity={setBatteryCapacity}
-                                peakPrice={peakPrice}
-                                setPeakPrice={setPeakPrice}
-                                offPeakPrice={offPeakPrice}
-                                setOffPeakPrice={setOffPeakPrice}
-                                onSimulate={handleSimulate}
-                                onReset={handleReset}
-                                isLoading={isLoading}
-                            />
-                        </div>
+                        {isControlPanelVisible && (
+                            <div className="lg:col-span-3">
+                                <ControlPanel
+                                    batteryCapacity={batteryCapacity}
+                                    setBatteryCapacity={setBatteryCapacity}
+                                    peakPrice={peakPrice}
+                                    setPeakPrice={setPeakPrice}
+                                    offPeakPrice={offPeakPrice}
+                                    setOffPeakPrice={setOffPeakPrice}
+                                    onSimulate={handleSimulate}
+                                    onReset={handleReset}
+                                    isLoading={isLoading}
+                                />
+                            </div>
+                        )}
 
                         {/* Animation */}
-                        <div className="lg:col-span-5">
-                            <MicrogridAnimation
-                                simulationData={result?.smart_data || []}
-                                isPlaying={isPlaying}
-                                currentHour={currentHour}
-                                onHourChange={setCurrentHour}
-                                onPlayPause={() => setIsPlaying(!isPlaying)}
-                            />
-                        </div>
+                        {isMicrogridAnimationVisible && (
+                            <div className={isControlPanelVisible ? "lg:col-span-5" : "lg:col-span-7"}>
+                                <MicrogridAnimation
+                                    simulationData={result?.smart_data || []}
+                                    isPlaying={isPlaying}
+                                    currentHour={currentHour}
+                                    onHourChange={setCurrentHour}
+                                    onPlayPause={() => setIsPlaying(!isPlaying)}
+                                />
+                            </div>
+                        )}
 
                         {/* Power Gauges */}
-                        <div className="lg:col-span-4">
-                            <PowerGauge
-                                currentData={currentData}
-                                historicalData={result?.smart_data.slice(0, currentHour + 1) || []}
-                            />
-                        </div>
+                        {isPowerGaugeVisible && (
+                            <div className={(() => {
+                                let span = "lg:col-span-4";
+                                if (!isControlPanelVisible && !isMicrogridAnimationVisible) span = "lg:col-span-12";
+                                else if (!isControlPanelVisible) span = "lg:col-span-5";
+                                else if (!isMicrogridAnimationVisible) span = "lg:col-span-5";
+                                return span;
+                            })()}>
+                                <PowerGauge
+                                    currentData={currentData}
+                                    historicalData={result?.smart_data.slice(0, currentHour + 1) || []}
+                                />
+                            </div>
+                        )}
                     </div>
 
                     {/* Row 2: Comparison Card + Chart */}
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                         {/* Comparison Card */}
-                        <div className="lg:col-span-4">
-                            <ComparisonCard summary={result?.summary || null} />
-                        </div>
+                        {isComparisonCardVisible && (
+                            <div className="lg:col-span-4">
+                                <ComparisonCard summary={result?.summary || null} />
+                            </div>
+                        )}
 
                         {/* Energy Chart */}
-                        <div className="lg:col-span-8">
-                            <EnergyChart
-                                baselineData={result?.baseline_data || []}
-                                smartData={result?.smart_data || []}
-                            />
-                        </div>
+                        {isEnergyChartVisible && (
+                            <div className={isComparisonCardVisible ? "lg:col-span-8" : "lg:col-span-12"}>
+                                <EnergyChart
+                                    baselineData={result?.baseline_data || []}
+                                    smartData={result?.smart_data || []}
+                                />
+                            </div>
+                        )}
                     </div>
 
                     {/* Row 3: Info Cards */}
@@ -302,6 +339,152 @@ export default function Dashboard() {
                     </div>
                 </footer>
             </div>
+        </div>
+    );
+}
+
+// Sub-component for toggle menu
+function DashboardToggleMenu({
+    isControlPanelVisible,
+    setIsControlPanelVisible,
+    isMicrogridAnimationVisible,
+    setIsMicrogridAnimationVisible,
+    isPowerGaugeVisible,
+    setIsPowerGaugeVisible,
+    isComparisonCardVisible,
+    setIsComparisonCardVisible,
+    isEnergyChartVisible,
+    setIsEnergyChartVisible,
+}: {
+    isControlPanelVisible: boolean;
+    setIsControlPanelVisible: (v: boolean) => void;
+    isMicrogridAnimationVisible: boolean;
+    setIsMicrogridAnimationVisible: (v: boolean) => void;
+    isPowerGaugeVisible: boolean;
+    setIsPowerGaugeVisible: (v: boolean) => void;
+    isComparisonCardVisible: boolean;
+    setIsComparisonCardVisible: (v: boolean) => void;
+    isEnergyChartVisible: boolean;
+    setIsEnergyChartVisible: (v: boolean) => void;
+}) {
+    const [isOpen, setIsOpen] = useState(false);
+
+    const allVisible =
+        isControlPanelVisible &&
+        isMicrogridAnimationVisible &&
+        isPowerGaugeVisible &&
+        isComparisonCardVisible &&
+        isEnergyChartVisible;
+
+    const handleToggleAll = () => {
+        const newState = !allVisible;
+        setIsControlPanelVisible(newState);
+        setIsMicrogridAnimationVisible(newState);
+        setIsPowerGaugeVisible(newState);
+        setIsComparisonCardVisible(newState);
+        setIsEnergyChartVisible(newState);
+    };
+
+    return (
+        <div className="relative z-50">
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="flex items-center justify-center w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 text-emerald-400 hover:bg-slate-700 hover:text-emerald-300 transition-all shadow-lg"
+                title="Toggle card visibility"
+                aria-label="View options"
+            >
+                <MoreVertical className="w-5 h-5" />
+            </button>
+
+            {isOpen && (
+                <div className="absolute right-0 mt-2 w-56 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden">
+                    <div className="p-2 space-y-1">
+                        {/* Show/Hide All */}
+                        <button
+                            onClick={handleToggleAll}
+                            className="w-full text-left px-3 py-2 rounded-md hover:bg-slate-700 transition-colors flex items-center gap-3 text-slate-200"
+                        >
+                            <input
+                                type="checkbox"
+                                checked={allVisible}
+                                onChange={handleToggleAll}
+                                className="rounded border-slate-600 bg-slate-700 text-emerald-500 focus:ring-emerald-500/50"
+                            />
+                            <span className="text-sm font-medium">
+                                {allVisible ? "Hide All" : "Show All"}
+                            </span>
+                        </button>
+
+                        <div className="h-px bg-slate-700 my-1" />
+
+                        {/* Card Options */}
+                        <button
+                            onClick={() => setIsControlPanelVisible(!isControlPanelVisible)}
+                            className="w-full text-left px-3 py-2 rounded-md hover:bg-slate-700 transition-colors flex items-center gap-3 text-slate-300"
+                        >
+                            <input
+                                type="checkbox"
+                                checked={isControlPanelVisible}
+                                onChange={() => setIsControlPanelVisible(!isControlPanelVisible)}
+                                className="rounded border-slate-600 bg-slate-700 text-emerald-500 focus:ring-emerald-500/50"
+                            />
+                            <span className="text-sm">Control Panel</span>
+                        </button>
+
+                        <button
+                            onClick={() => setIsMicrogridAnimationVisible(!isMicrogridAnimationVisible)}
+                            className="w-full text-left px-3 py-2 rounded-md hover:bg-slate-700 transition-colors flex items-center gap-3 text-slate-300"
+                        >
+                            <input
+                                type="checkbox"
+                                checked={isMicrogridAnimationVisible}
+                                onChange={() => setIsMicrogridAnimationVisible(!isMicrogridAnimationVisible)}
+                                className="rounded border-slate-600 bg-slate-700 text-emerald-500 focus:ring-emerald-500/50"
+                            />
+                            <span className="text-sm">Grid Animation</span>
+                        </button>
+
+                        <button
+                            onClick={() => setIsPowerGaugeVisible(!isPowerGaugeVisible)}
+                            className="w-full text-left px-3 py-2 rounded-md hover:bg-slate-700 transition-colors flex items-center gap-3 text-slate-300"
+                        >
+                            <input
+                                type="checkbox"
+                                checked={isPowerGaugeVisible}
+                                onChange={() => setIsPowerGaugeVisible(!isPowerGaugeVisible)}
+                                className="rounded border-slate-600 bg-slate-700 text-emerald-500 focus:ring-emerald-500/50"
+                            />
+                            <span className="text-sm">Power Gauge</span>
+                        </button>
+
+                        <button
+                            onClick={() => setIsComparisonCardVisible(!isComparisonCardVisible)}
+                            className="w-full text-left px-3 py-2 rounded-md hover:bg-slate-700 transition-colors flex items-center gap-3 text-slate-300"
+                        >
+                            <input
+                                type="checkbox"
+                                checked={isComparisonCardVisible}
+                                onChange={() => setIsComparisonCardVisible(!isComparisonCardVisible)}
+                                className="rounded border-slate-600 bg-slate-700 text-emerald-500 focus:ring-emerald-500/50"
+                            />
+                            <span className="text-sm">Comparisons</span>
+                        </button>
+
+                        <button
+                            onClick={() => setIsEnergyChartVisible(!isEnergyChartVisible)}
+                            className="w-full text-left px-3 py-2 rounded-md hover:bg-slate-700 transition-colors flex items-center gap-3 text-slate-300"
+                        >
+                            <input
+                                type="checkbox"
+                                checked={isEnergyChartVisible}
+                                onChange={() => setIsEnergyChartVisible(!isEnergyChartVisible)}
+                                className="rounded border-slate-600 bg-slate-700 text-emerald-500 focus:ring-emerald-500/50"
+                            />
+                            <span className="text-sm">Energy Chart</span>
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
