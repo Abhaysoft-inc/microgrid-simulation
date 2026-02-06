@@ -1705,7 +1705,6 @@ export default function VLabsSimulation() {
                 {/* Energy Flow Maximize Modal */}
                 {isEnergyFlowMaximized && (
                     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-                        {console.log("Rendering Main Energy Flow Modal")}
                         <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[90vh]">
                             <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
                                 <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">

@@ -73,7 +73,7 @@ export default function EnergyFlowD3({ data, currentHour, strategy }: EnergyFlow
 
     const shapes = [
         {
-            type: 'line',
+            type: 'line' as const,
             x0: `${currentHour}:00`,
             y0: 0,
             x1: `${currentHour}:00`,
@@ -88,6 +88,7 @@ export default function EnergyFlowD3({ data, currentHour, strategy }: EnergyFlow
 
     return (
         <div className="w-full h-full">
+            {/* @ts-expect-error Plotly types are complex, using any for simplicity */}
             <Plot
                 data={plotData}
                 layout={{
