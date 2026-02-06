@@ -14,10 +14,12 @@
 
 import React, { useState, useCallback, useEffect } from "react";
 import Joyride, { CallBackProps, STATUS, Step } from 'react-joyride';
-import { Play, Pause, RotateCcw, ChevronLeft, ChevronRight, Sun, Battery, Home, Zap, Settings, BarChart3, BookOpen, FlaskConical, CheckSquare, FileText, CheckCircle2, XCircle, LayoutList, Lightbulb, HelpCircle, X, Award, Leaf, TrendingUp, Target, AlertTriangle, CloudRain, BatteryWarning, MessageSquare, MoreVertical, Maximize } from "lucide-react";
+import { Play, Pause, RotateCcw, ChevronLeft, ChevronRight, Sun, Battery, Home, Zap, Settings, BarChart3, BookOpen, FlaskConical, CheckSquare, FileText, CheckCircle2, XCircle, LayoutList, Lightbulb, HelpCircle, X, Award, Leaf, TrendingUp, Target, AlertTriangle, CloudRain, BatteryWarning, MessageSquare, MoreVertical, Maximize, Download } from "lucide-react";
 import Microgrid3DScene from "./Microgrid3DScene";
 import EnergyFlowD3 from "./EnergyFlowD3";
 import FeedbackTab from "./FeedbackTab";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -632,6 +634,188 @@ export default function VLabsSimulation() {
         }, 100);
     };
 
+    const downloadReport = async () => {
+        if (!result || !reportData) {
+            alert("Please run a simulation first to generate a report.");
+            return;
+        }
+
+        try {
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const margin = 15;
+            let y = 20;
+
+            // ── Title ──
+            pdf.setFontSize(22);
+            pdf.setTextColor(15, 23, 42);
+            pdf.text('Microgrid Simulation Report', pageWidth / 2, y, { align: 'center' });
+            y += 8;
+            pdf.setFontSize(10);
+            pdf.setTextColor(100, 116, 139);
+            pdf.text('Virtual Labs 2026 • Digital Twin Experiment', pageWidth / 2, y, { align: 'center' });
+            y += 4;
+            pdf.setDrawColor(15, 23, 42);
+            pdf.setLineWidth(0.5);
+            pdf.line(margin, y, pageWidth - margin, y);
+            y += 10;
+
+            // ── Eco-Grade Badge ──
+            const gradeColors: Record<string, [number, number, number]> = {
+                A: [34, 197, 94], B: [59, 130, 246], C: [234, 179, 8], D: [249, 115, 22], F: [239, 68, 68]
+            };
+            const gc = gradeColors[reportData.grade] || [100, 100, 100];
+            pdf.setDrawColor(gc[0], gc[1], gc[2]);
+            pdf.setLineWidth(1.5);
+            pdf.circle(pageWidth - margin - 12, y + 2, 10);
+            pdf.setFontSize(20);
+            pdf.setTextColor(gc[0], gc[1], gc[2]);
+            pdf.text(reportData.grade, pageWidth - margin - 12, y + 5, { align: 'center' });
+            pdf.setFontSize(7);
+            pdf.setTextColor(100, 116, 139);
+            pdf.text('ECO-GRADE', pageWidth - margin - 12, y + 14, { align: 'center' });
+
+            // ── Summary Stats ──
+            pdf.setFontSize(13);
+            pdf.setTextColor(15, 23, 42);
+            pdf.text('Performance Summary', margin, y);
+            y += 8;
+
+            const stats = [
+                ['Total Cost', `Rs. ${reportData.totalCost.toFixed(2)}`],
+                ['Solar Used', `${reportData.totalSolar.toFixed(1)} kWh`],
+                ['Grid Used', `${reportData.totalGrid.toFixed(1)} kWh`],
+                ['CO2 Saved', `${reportData.co2Saved.toFixed(1)} kg`],
+                ['Self-Sufficiency', `${reportData.selfSufficiency.toFixed(1)}%`],
+            ];
+
+            const colWidth = (pageWidth - 2 * margin) / stats.length;
+            stats.forEach(([label, value], i) => {
+                const x = margin + i * colWidth;
+                pdf.setFillColor(248, 250, 252);
+                pdf.roundedRect(x + 1, y, colWidth - 2, 18, 2, 2, 'F');
+                pdf.setFontSize(7);
+                pdf.setTextColor(100, 116, 139);
+                pdf.text(label.toUpperCase(), x + colWidth / 2, y + 6, { align: 'center' });
+                pdf.setFontSize(11);
+                pdf.setTextColor(15, 23, 42);
+                pdf.text(value, x + colWidth / 2, y + 14, { align: 'center' });
+            });
+            y += 26;
+
+            // ── Cost Comparison ──
+            pdf.setFontSize(13);
+            pdf.setTextColor(15, 23, 42);
+            pdf.text('Strategy Comparison', margin, y);
+            y += 6;
+
+            autoTable(pdf, {
+                startY: y,
+                margin: { left: margin, right: margin },
+                head: [['Metric', 'Baseline', 'Smart', 'Savings']],
+                body: [
+                    [
+                        'Daily Cost',
+                        `Rs. ${result.summary.baseline_total_cost.toFixed(2)}`,
+                        `Rs. ${result.summary.smart_total_cost.toFixed(2)}`,
+                        `Rs. ${result.summary.cost_saved.toFixed(2)} (${result.summary.cost_saved_percent.toFixed(1)}%)`
+                    ],
+                    [
+                        'Grid Usage',
+                        `${result.summary.baseline_grid_usage.toFixed(1)} kWh`,
+                        `${result.summary.smart_grid_usage.toFixed(1)} kWh`,
+                        `${result.summary.grid_reduced.toFixed(1)} kWh (${result.summary.grid_reduced_percent.toFixed(1)}%)`
+                    ],
+                ],
+                headStyles: { fillColor: [30, 41, 59], fontSize: 9, textColor: [255, 255, 255] },
+                bodyStyles: { fontSize: 9, textColor: [30, 41, 59] },
+                alternateRowStyles: { fillColor: [248, 250, 252] },
+                theme: 'grid',
+            });
+            y = (pdf as any).lastAutoTable.finalY + 10;
+
+            // ── Chart Image ── (capture Plotly chart from analysis tab)
+            const plotlyEl = document.querySelector('#analysis-report-content .js-plotly-plot') as HTMLElement | null;
+            if (plotlyEl) {
+                try {
+                    const Plotly = await import('plotly.js-dist-min');
+                    const imgUrl = await (Plotly as any).toImage(plotlyEl, { format: 'png', width: 900, height: 400 });
+                    const chartImgWidth = pageWidth - 2 * margin;
+                    const chartImgHeight = chartImgWidth * (400 / 900);
+
+                    // Check if chart fits on current page
+                    if (y + chartImgHeight + 10 > pdf.internal.pageSize.getHeight() - 15) {
+                        pdf.addPage();
+                        y = 20;
+                    }
+
+                    pdf.setFontSize(13);
+                    pdf.setTextColor(15, 23, 42);
+                    pdf.text('24-Hour Energy Flow Analysis', margin, y);
+                    y += 6;
+                    pdf.addImage(imgUrl, 'PNG', margin, y, chartImgWidth, chartImgHeight);
+                    y += chartImgHeight + 8;
+                } catch (chartErr) {
+                    console.warn('Could not capture chart for PDF:', chartErr);
+                }
+            }
+
+            // ── Hourly Breakdown Table ──
+            if (y + 30 > pdf.internal.pageSize.getHeight() - 15) {
+                pdf.addPage();
+                y = 20;
+            }
+            pdf.setFontSize(13);
+            pdf.setTextColor(15, 23, 42);
+            pdf.text('24-Hour Breakdown', margin, y);
+            y += 6;
+
+            const hourlyBody = result.smart_data.map((smart, i) => {
+                const baseline = result.baseline_data[i];
+                const savings = baseline.hourly_cost - smart.hourly_cost;
+                return [
+                    `${String(i).padStart(2, '0')}:00${smart.is_peak_hour ? ' (Peak)' : ''}`,
+                    smart.solar_generation.toFixed(1),
+                    smart.load_demand.toFixed(1),
+                    `${smart.battery_soc.toFixed(0)}%`,
+                    baseline.grid_usage.toFixed(1),
+                    smart.grid_usage.toFixed(1),
+                    savings > 0 ? `Rs. ${savings.toFixed(2)}` : '-',
+                ];
+            });
+
+            autoTable(pdf, {
+                startY: y,
+                margin: { left: margin, right: margin },
+                head: [['Hour', 'Solar', 'Load', 'Battery', 'Grid (Base)', 'Grid (Smart)', 'Savings']],
+                body: hourlyBody,
+                headStyles: { fillColor: [30, 41, 59], fontSize: 7, textColor: [255, 255, 255] },
+                bodyStyles: { fontSize: 7, textColor: [30, 41, 59], cellPadding: 1.5 },
+                alternateRowStyles: { fillColor: [248, 250, 252] },
+                theme: 'grid',
+            });
+
+            // ── Footer ──
+            const pageCount = pdf.getNumberOfPages();
+            for (let p = 1; p <= pageCount; p++) {
+                pdf.setPage(p);
+                pdf.setFontSize(8);
+                pdf.setTextColor(148, 163, 184);
+                pdf.text(
+                    `Generated by VLabs Microgrid Simulator  •  Page ${p} of ${pageCount}`,
+                    pageWidth / 2,
+                    pdf.internal.pageSize.getHeight() - 8,
+                    { align: 'center' }
+                );
+            }
+
+            pdf.save('Microgrid_Simulation_Report.pdf');
+        } catch (error) {
+            console.error('Error generating PDF:', error);
+            alert('Failed to generate PDF report. Please try again.');
+        }
+    };
+
     return (
         <div className="min-h-screen bg-gray-50">
             {/* Challenge Selection Modal */}
@@ -937,6 +1121,7 @@ export default function VLabsSimulation() {
                         currentStep={currentStep}
                         completedSteps={completedSteps}
                         onStepChange={setCurrentStep}
+                        onGoToSimulation={() => setActiveTab("simulation")}
                     />
                 )}
 
@@ -1474,7 +1659,7 @@ export default function VLabsSimulation() {
                 )}
 
                 {activeTab === "analysis" && result && (
-                    <AnalysisContent result={result} />
+                    <AnalysisContent result={result} onDownloadReport={downloadReport} />
                 )}
 
                 {activeTab === "analysis" && !result && (
@@ -1512,7 +1697,7 @@ export default function VLabsSimulation() {
             </main>
 
             {/* Footer */}
-            <footer className="bg-white border-t border-gray-200 mt-8 py-4">
+            <footer className="bg-white border-t border-gray-200 mt-8 py-4 relative">
                 <div className="max-w-7xl mx-auto px-4 text-center text-sm text-gray-600">
                     <p>Microgrid Digital Twin • Virtual Labs Hackathon 2026</p>
                     <p className="text-xs mt-1 text-gray-500">Powered by Next.js + Three.js + D3.js + p5.js</p>
@@ -1520,6 +1705,7 @@ export default function VLabsSimulation() {
                 {/* Energy Flow Maximize Modal */}
                 {isEnergyFlowMaximized && (
                     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+                        {console.log("Rendering Main Energy Flow Modal")}
                         <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[90vh]">
                             <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
                                 <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
@@ -1533,7 +1719,7 @@ export default function VLabsSimulation() {
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
-                            <div className="p-0 flex-1 overflow-auto bg-white min-h-[400px]">
+                            <div className="p-6 flex-1 overflow-auto bg-white min-h-[400px]">
                                 <EnergyFlowD3
                                     data={result ? result.smart_data : activeData}
                                     currentHour={currentHour}
@@ -1543,6 +1729,7 @@ export default function VLabsSimulation() {
                         </div>
                     </div>
                 )}
+
             </footer>
         </div>
     );
@@ -1772,69 +1959,139 @@ function TheoryContent() {
 }
 
 // Procedure Content Component
-function ProcedureContent({ currentStep, completedSteps, onStepChange }: {
+function ProcedureContent({ currentStep, completedSteps, onStepChange, onGoToSimulation }: {
     currentStep: number;
     completedSteps: number[];
     onStepChange: (step: number) => void;
+    onGoToSimulation: () => void;
 }) {
+    // Map each step to a GIF
+    const stepGifs: Record<number, string> = {
+        0: '/battery-capacity.gif',  // Initialize Microgrid
+        1: '/energy-prices.gif',     // Set Energy Prices
+        2: '/baseline.gif',          // Run Baseline Strategy
+        3: '/smart.gif',             // Run Smart Strategy
+        4: '/smart.gif',             // Analyze Results (reuse smart gif)
+    };
+
+    const stepGifDescriptions: Record<number, string> = {
+        0: 'Configure your battery capacity and initial state of charge',
+        1: 'Set peak and off-peak electricity pricing',
+        2: 'Watch how the baseline strategy operates without optimization',
+        3: 'See how the smart strategy optimizes energy usage',
+        4: 'Compare the results of both strategies',
+    };
+
     return (
-        <div className="bg-white rounded-lg border border-slate-200 p-6">
-            <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
-                <Settings className="w-5 h-5 text-blue-600" />
-                Simulation Walkthrough
-            </h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Left: Steps List */}
+            <div className="bg-white rounded-lg border border-slate-200 p-6">
+                <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+                    <Settings className="w-5 h-5 text-blue-600" />
+                    Simulation Walkthrough
+                </h2>
 
-            <div className="space-y-3">
-                {PROCEDURE_STEPS.map((step, index) => {
-                    const isActive = currentStep === index;
-                    const isCompleted = completedSteps.includes(index);
+                <div className="space-y-3">
+                    {PROCEDURE_STEPS.map((step, index) => {
+                        const isActive = currentStep === index;
+                        const isCompleted = completedSteps.includes(index);
 
-                    return (
-                        <button
-                            key={step.id}
-                            onClick={() => onStepChange(index)}
-                            className={`w-full text-left p-4 rounded-lg border transition-all group ${isActive
-                                ? "bg-slate-50 border-blue-500"
-                                : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50"
-                                }`}
-                        >
-                            <div className="flex items-start gap-4">
-                                <div className={`w-8 h-8 rounded flex items-center justify-center transition-colors ${isActive
-                                    ? "bg-blue-600 text-white"
-                                    : isCompleted
-                                        ? "bg-slate-800 text-white"
-                                        : "bg-slate-100 text-slate-400"
-                                    }`}>
-                                    <span className="text-sm font-bold">{step.id}</span>
-                                </div>
-                                <div className="flex-1">
-                                    <h4 className={`text-sm font-semibold ${isActive ? "text-slate-900" : "text-slate-700"
+                        return (
+                            <button
+                                key={step.id}
+                                onClick={() => onStepChange(index)}
+                                className={`w-full text-left p-4 rounded-lg border transition-all group ${isActive
+                                    ? "bg-slate-50 border-blue-500"
+                                    : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50"
+                                    }`}
+                            >
+                                <div className="flex items-start gap-4">
+                                    <div className={`w-8 h-8 rounded flex items-center justify-center transition-colors ${isActive
+                                        ? "bg-blue-600 text-white"
+                                        : isCompleted
+                                            ? "bg-slate-800 text-white"
+                                            : "bg-slate-100 text-slate-400"
                                         }`}>
-                                        {step.title}
-                                    </h4>
-                                    <p className={`text-xs mt-1 ${isActive ? "text-slate-600" : "text-slate-500"}`}>
-                                        {step.description}
-                                    </p>
+                                        <span className="text-sm font-bold">{step.id}</span>
+                                    </div>
+                                    <div className="flex-1">
+                                        <h4 className={`text-sm font-semibold ${isActive ? "text-slate-900" : "text-slate-700"
+                                            }`}>
+                                            {step.title}
+                                        </h4>
+                                        <p className={`text-xs mt-1 ${isActive ? "text-slate-600" : "text-slate-500"}`}>
+                                            {step.description}
+                                        </p>
+                                    </div>
+                                    {isActive && <ChevronRight className="w-4 h-4 text-blue-500" />}
                                 </div>
-                                {isActive && <ChevronRight className="w-4 h-4 text-blue-500" />}
-                            </div>
-                        </button>
-                    )
-                })}
+                            </button>
+                        )
+                    })}
+                </div>
+            </div>
+
+            {/* Right: GIF Preview */}
+            <div className="bg-white rounded-lg border border-slate-200 p-6">
+                <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+                    <Play className="w-5 h-5 text-blue-600" />
+                    Step {currentStep + 1} Preview
+                </h2>
+                <p className="text-sm text-slate-600 mb-4">{stepGifDescriptions[currentStep]}</p>
+                <div className="relative bg-slate-100 rounded-lg overflow-hidden border border-slate-200 aspect-video flex items-center justify-center">
+                    <img
+                        src={stepGifs[currentStep]}
+                        alt={`Step ${currentStep + 1} demonstration`}
+                        className="w-full h-full object-contain"
+                    />
+                </div>
+                <div className="mt-4 flex items-center justify-between">
+                    <button
+                        onClick={() => onStepChange(Math.max(0, currentStep - 1))}
+                        disabled={currentStep === 0}
+                        className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                    >
+                        <ChevronLeft className="w-4 h-4" />
+                        Previous
+                    </button>
+                    <span className="text-xs text-slate-500">Step {currentStep + 1} of {PROCEDURE_STEPS.length}</span>
+                    <button
+                        onClick={() => {
+                            if (currentStep === PROCEDURE_STEPS.length - 1) {
+                                onGoToSimulation();
+                            } else {
+                                onStepChange(currentStep + 1);
+                            }
+                        }}
+                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-2"
+                    >
+                        {currentStep === PROCEDURE_STEPS.length - 1 ? 'Go to Simulation' : 'Next'}
+                        <ChevronRight className="w-4 h-4" />
+                    </button>
+                </div>
             </div>
         </div>
     );
 }
 
 // Analysis Content Component
-function AnalysisContent({ result }: { result: SimulationResult }) {
+function AnalysisContent({ result, onDownloadReport }: { result: SimulationResult, onDownloadReport: () => void }) {
     return (
-        <div className="space-y-6">
+        <div className="space-y-6" id="analysis-report-content">
             {/* Header */}
             <div className="bg-white rounded-xl border border-gray-200 p-6">
                 <div className="flex items-center justify-between mb-6">
                     <h2 className="text-xl font-medium text-gray-900">Analysis Results</h2>
-                    <span className="text-sm text-gray-400">Baseline vs Smart Strategy</span>
+                    <div className="flex items-center gap-4">
+                        <span className="text-sm text-gray-400">Baseline vs Smart Strategy</span>
+                        <button
+                            onClick={onDownloadReport}
+                            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors"
+                        >
+                            <Download className="w-4 h-4" />
+                            Download Report
+                        </button>
+                    </div>
                 </div>
 
                 {/* Summary Cards */}
@@ -1933,6 +2190,21 @@ function AnalysisContent({ result }: { result: SimulationResult }) {
                             </li>
                         </ul>
                     </div>
+                </div>
+            </div>
+
+            {/* Energy Flow Graph */}
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+                <h3 className="text-sm font-medium text-gray-900 mb-4 flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-blue-600" />
+                    24-Hour Energy Flow (Smart Strategy)
+                </h3>
+                <div className="h-[400px] bg-slate-50 rounded-lg border border-slate-100 overflow-hidden">
+                    <EnergyFlowD3
+                        data={result.smart_data}
+                        currentHour={24}
+                        strategy="smart"
+                    />
                 </div>
             </div>
 
