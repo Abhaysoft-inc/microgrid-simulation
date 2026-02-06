@@ -14,6 +14,7 @@
 
 import React, { useRef, useEffect } from "react";
 import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 interface Microgrid3DSceneProps {
     currentData: {
@@ -34,6 +35,7 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
         scene: THREE.Scene;
         camera: THREE.PerspectiveCamera;
         renderer: THREE.WebGLRenderer;
+        controls: OrbitControls;
         sun: THREE.Group;
         moon: THREE.Group;
         sunLight: THREE.DirectionalLight;
@@ -95,6 +97,18 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         renderer.toneMappingExposure = 1.5;
         containerRef.current.appendChild(renderer.domElement);
+
+        // ========================================
+        // ORBIT CONTROLS - Mouse interaction
+        // ========================================
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.minDistance = 8;
+        controls.maxDistance = 40;
+        controls.maxPolarAngle = Math.PI / 2.1; // Prevent going below ground
+        controls.target.set(0, 2, 0); // Look at center of scene
+        controls.update();
 
         // ========================================
         // LIGHTING SETUP - Dynamic day/night
@@ -545,6 +559,7 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
             scene,
             camera,
             renderer,
+            controls,
             sun,
             moon,
             sunLight,
@@ -728,6 +743,9 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
                 particle.mesh.geometry.attributes.position.needsUpdate = true;
             });
 
+            // Update orbit controls
+            controls.update();
+
             renderer.render(scene, camera);
         };
         animate();
@@ -746,6 +764,7 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
             window.removeEventListener('resize', handleResize);
             if (sceneRef.current) {
                 cancelAnimationFrame(sceneRef.current.animationId);
+                sceneRef.current.controls.dispose();
                 sceneRef.current.renderer.dispose();
                 if (containerRef.current && sceneRef.current.renderer.domElement) {
                     containerRef.current.removeChild(sceneRef.current.renderer.domElement);

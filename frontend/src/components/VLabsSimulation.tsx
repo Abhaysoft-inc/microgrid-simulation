@@ -14,8 +14,9 @@
 
 import React, { useState, useCallback, useEffect } from "react";
 import Joyride, { CallBackProps, STATUS, Step } from 'react-joyride';
-import { Play, Pause, RotateCcw, ChevronLeft, ChevronRight, Sun, Battery, Home, Zap, Settings, BarChart3, BookOpen, FlaskConical, CheckSquare, FileText, CheckCircle2, XCircle, LayoutList, Lightbulb, HelpCircle, X, Award, Leaf, TrendingUp, Target, AlertTriangle, CloudRain, BatteryWarning, MessageSquare, MoreVertical, Maximize, Download } from "lucide-react";
+import { Play, Pause, RotateCcw, ChevronLeft, ChevronRight, Sun, Battery, Home, Zap, Settings, BarChart3, BookOpen, FlaskConical, CheckSquare, FileText, CheckCircle2, XCircle, LayoutList, Lightbulb, HelpCircle, X, Award, Leaf, TrendingUp, Target, AlertTriangle, CloudRain, BatteryWarning, MessageSquare, MoreVertical, Maximize, Download, Monitor, Smartphone } from "lucide-react";
 import Microgrid3DScene from "./Microgrid3DScene";
+import Microgrid2DScene from "./Microgrid2DScene";
 import EnergyFlowD3 from "./EnergyFlowD3";
 import FeedbackTab from "./FeedbackTab";
 import jsPDF from "jspdf";
@@ -166,6 +167,9 @@ export default function VLabsSimulation() {
     const [chatInput, setChatInput] = useState("");
     const [isChatLoading, setIsChatLoading] = useState(false);
     const [showChatMode, setShowChatMode] = useState(false);
+
+    // Visualization mode - 2D for low-end devices, 3D for better hardware
+    const [visualizationMode, setVisualizationMode] = useState<"3d" | "2d">("3d");
 
     // Challenge/Scenario state
     const [showChallengeModal, setShowChallengeModal] = useState(false);
@@ -1825,6 +1829,31 @@ export default function VLabsSimulation() {
                                         Microgrid Live View
                                     </h3>
                                     <div className="flex items-center gap-1">
+                                        {/* 2D/3D Toggle */}
+                                        <div className="flex items-center bg-slate-200 rounded-lg p-0.5 mr-2">
+                                            <button
+                                                onClick={() => setVisualizationMode("2d")}
+                                                className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all ${visualizationMode === "2d"
+                                                        ? "bg-white text-slate-900 shadow-sm"
+                                                        : "text-slate-500 hover:text-slate-700"
+                                                    }`}
+                                                title="2D Mode - Better for low-end devices"
+                                            >
+                                                <Smartphone className="w-3 h-3" />
+                                                2D
+                                            </button>
+                                            <button
+                                                onClick={() => setVisualizationMode("3d")}
+                                                className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all ${visualizationMode === "3d"
+                                                        ? "bg-white text-slate-900 shadow-sm"
+                                                        : "text-slate-500 hover:text-slate-700"
+                                                    }`}
+                                                title="3D Mode - Enhanced visualization"
+                                            >
+                                                <Monitor className="w-3 h-3" />
+                                                3D
+                                            </button>
+                                        </div>
                                         <button
                                             onClick={() => setIsPlaying(!isPlaying)}
                                             className="p-1.5 hover:bg-slate-200 rounded text-slate-600 transition-colors"
@@ -1847,9 +1876,11 @@ export default function VLabsSimulation() {
                                 </div>
 
                                 <div className="relative overflow-hidden bg-black">
-                                    <Microgrid3DScene
-                                        currentData={currentData}
-                                    />
+                                    {visualizationMode === "3d" ? (
+                                        <Microgrid3DScene currentData={currentData} />
+                                    ) : (
+                                        <Microgrid2DScene currentData={currentData} />
+                                    )}
                                 </div>
 
                                 {/* Time Slider */}
