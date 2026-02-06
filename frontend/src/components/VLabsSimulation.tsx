@@ -237,35 +237,35 @@ export default function VLabsSimulation() {
     const [runTour, setRunTour] = useState(false);
     const [tourSteps] = useState<Step[]>([
         {
-            target: '#tour-procedure-step',
-            content: 'Start here! Follow these step-by-step instructions to guide your experiment.',
-            placement: 'right',
+            target: '#tour-configuration',
+            content: 'Start here! Set your simulation parameters: Solar Capacity, Battery Size, and Weather Mode.',
+            placement: 'left',
             disableBeacon: true,
         },
         {
-            target: '#tour-configuration',
-            content: 'Set your simulation parameters here: Solar Capacity, Battery Size, and Weather.',
-            placement: 'right',
-        },
-        {
             target: '#tour-run-button',
-            content: 'Once configured, click "Run Simulation" to generate the data.',
-            placement: 'right',
+            content: 'Click "Run Simulation" to generate the energy data based on your configuration.',
+            placement: 'left',
         },
         {
             target: '#tour-live-view',
-            content: 'This 3D Digital Twin visualizes the microgrid operation in real-time.',
+            content: 'Watch the 3D Digital Twin visualize your microgrid operation in real-time. Use the time slider to explore different hours.',
             placement: 'left',
         },
         {
-            target: '#tour-stats-charts',
-            content: 'Monitor the Energy Flow interactively here.',
-            placement: 'left',
+            target: '#tour-procedure-step',
+            content: 'View the 24-Hour Energy Flow chart showing solar generation, grid usage, and battery activity over time.',
+            placement: 'right',
         },
         {
             target: '#tour-strategy-toggle',
-            content: 'Switch between Baseline and Smart strategies to compare cost efficiency.',
-            placement: 'top',
+            content: 'Switch between Baseline and Smart strategies to compare energy cost efficiency.',
+            placement: 'right',
+        },
+        {
+            target: '#tour-stats-charts',
+            content: 'Monitor the live battery status and adjust configuration settings from this panel.',
+            placement: 'left',
         },
     ]);
 
