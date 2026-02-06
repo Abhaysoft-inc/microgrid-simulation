@@ -32,6 +32,8 @@ class SimulationConfig:
     # Solar configuration
     solar_capacity_kw: float = 5.0      # Solar panel capacity (3kW or 5kW)
     weather_mode: str = "sunny"         # Weather: "sunny" (100%) or "cloudy" (50%)
+    # Load configuration
+    peak_load_demand: float = 7.0       # Peak load demand in kW (user configurable)
     # Delhi BSES/TPDDL Time-of-Day Tariff (₹/kWh) - 3-tier pricing
     off_peak_price: float = 4.00        # Off-peak (00:00-06:00): ₹4.00/kWh
     standard_price: float = 6.50        # Standard (06:00-18:00): ₹6.50/kWh
@@ -106,6 +108,9 @@ class MicrogridSimulator:
             2.5, 2.5, 3.0, 3.5, 4.0, 5.0,   # 12-5 PM: Afternoon (AC ramps up)
             6.5, 7.0, 6.5, 5.5, 4.0, 2.5    # 6-11 PM: Evening peak (AC, lights, TV)
         ])
+        
+        # Apply load scaling based on user's peak demand (7kW is the base peak)
+        load = load * (self.config.peak_load_demand / 7.0)
         
         # Add small random variation (±5%)
         np.random.seed(43)
