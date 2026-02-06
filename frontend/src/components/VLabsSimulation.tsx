@@ -105,6 +105,7 @@ export default function VLabsSimulation() {
     const [initialSoC, setInitialSoC] = useState(50);
     const [solarCapacity, setSolarCapacity] = useState(5);
     const [weatherMode, setWeatherMode] = useState<"sunny" | "cloudy">("sunny");
+    const [peakLoadDemand, setPeakLoadDemand] = useState(7); // Peak load demand in kW (default 7kW for Delhi residential)
     // 3-tier Time-of-Day (ToD) pricing
     const [offPeakPrice, setOffPeakPrice] = useState(4);
     const [standardPrice, setStandardPrice] = useState(6.5);
@@ -307,7 +308,10 @@ export default function VLabsSimulation() {
                     : 0;
                 // Apply capacity and weather factors to solar generation
                 const solar = baseSolar * capacityFactor * weatherEfficiency;
-                const load = [1.5, 1.5, 1.5, 1.5, 2.0, 2.5, 3.5, 4.0, 4.5, 3.5, 3.0, 2.5, 2.5, 2.5, 3.0, 3.5, 4.0, 5.0, 6.5, 7.0, 6.5, 5.5, 4.0, 2.5][hour];
+                // Base load profile (peak is 7kW at hour 19)
+                const baseLoadProfile = [1.5, 1.5, 1.5, 1.5, 2.0, 2.5, 3.5, 4.0, 4.5, 3.5, 3.0, 2.5, 2.5, 2.5, 3.0, 3.5, 4.0, 5.0, 6.5, 7.0, 6.5, 5.5, 4.0, 2.5][hour];
+                // Scale load based on user's peak demand (7kW is the base peak)
+                const load = baseLoadProfile * (peakLoadDemand / 7.0);
                 const isPeak = hour >= 14 && hour < 22;
                 const price = isPeak ? peakPrice : offPeakPrice;
 
@@ -373,7 +377,7 @@ export default function VLabsSimulation() {
 
         setCurrentHour(0);
         setIsPlaying(true);
-    }, [batteryCapacity, solarCapacity, weatherMode, initialSoC, peakPrice, offPeakPrice]);
+    }, [batteryCapacity, solarCapacity, weatherMode, peakLoadDemand, initialSoC, peakPrice, offPeakPrice]);
 
     // Run simulation
     const runSimulation = useCallback(async () => {
@@ -388,6 +392,7 @@ export default function VLabsSimulation() {
                     battery_capacity_kwh: batteryCapacity,
                     solar_capacity_kw: solarCapacity,
                     weather_mode: weatherMode,
+                    peak_load_demand: peakLoadDemand,
                     off_peak_price: offPeakPrice,
                     standard_price: standardPrice,
                     peak_price: peakPrice,
@@ -410,7 +415,7 @@ export default function VLabsSimulation() {
         } finally {
             setIsLoading(false);
         }
-    }, [batteryCapacity, solarCapacity, weatherMode, peakPrice, standardPrice, offPeakPrice, initialSoC, currentStep, completedSteps, generateSampleData]);
+    }, [batteryCapacity, solarCapacity, weatherMode, peakLoadDemand, peakPrice, standardPrice, offPeakPrice, initialSoC, currentStep, completedSteps, generateSampleData]);
 
     // Silent update - just update data without restarting animation (for parameter changes)
     const updateSimulationData = useCallback(async () => {
@@ -422,6 +427,7 @@ export default function VLabsSimulation() {
                     battery_capacity_kwh: batteryCapacity,
                     solar_capacity_kw: solarCapacity,
                     weather_mode: weatherMode,
+                    peak_load_demand: peakLoadDemand,
                     off_peak_price: offPeakPrice,
                     standard_price: standardPrice,
                     peak_price: peakPrice,
@@ -445,7 +451,10 @@ export default function VLabsSimulation() {
                     const solar = hour >= 6 && hour <= 18
                         ? solarCapacity * Math.exp(-0.5 * Math.pow((hour - 12) / 3, 2))
                         : 0;
-                    const load = [1.5, 1.5, 1.5, 1.5, 2.0, 2.5, 3.5, 4.0, 4.5, 3.5, 3.0, 2.5, 2.5, 2.5, 3.0, 3.5, 4.0, 5.0, 6.5, 7.0, 6.5, 5.5, 4.0, 2.5][hour];
+                    // Base load profile (peak is 7kW at hour 19)
+                    const baseLoadProfile = [1.5, 1.5, 1.5, 1.5, 2.0, 2.5, 3.5, 4.0, 4.5, 3.5, 3.0, 2.5, 2.5, 2.5, 3.0, 3.5, 4.0, 5.0, 6.5, 7.0, 6.5, 5.5, 4.0, 2.5][hour];
+                    // Scale load based on user's peak demand (7kW is the base peak)
+                    const load = baseLoadProfile * (peakLoadDemand / 7.0);
                     const isPeak = hour >= 14 && hour < 22;
                     const price = isPeak ? peakPrice : offPeakPrice;
 
@@ -509,7 +518,7 @@ export default function VLabsSimulation() {
                 },
             });
         }
-    }, [batteryCapacity, solarCapacity, weatherMode, peakPrice, standardPrice, offPeakPrice, initialSoC]);
+    }, [batteryCapacity, solarCapacity, weatherMode, peakLoadDemand, peakPrice, standardPrice, offPeakPrice, initialSoC]);
 
     // Auto-run simulation when parameters change (debounced) - silent update only
     useEffect(() => {
@@ -521,7 +530,7 @@ export default function VLabsSimulation() {
 
         return () => clearTimeout(timeoutId);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [batteryCapacity, solarCapacity, weatherMode, offPeakPrice, standardPrice, peakPrice, initialSoC, updateSimulationData]);
+    }, [batteryCapacity, solarCapacity, weatherMode, peakLoadDemand, offPeakPrice, standardPrice, peakPrice, initialSoC, updateSimulationData]);
 
     // Handle step navigation
     const nextStep = () => {
@@ -1596,6 +1605,29 @@ export default function VLabsSimulation() {
                                             <span>5kW</span>
                                             <span>7kW</span>
                                         </div>
+                                    </div>
+
+                                    {/* Max Load Demand */}
+                                    <div>
+                                        <label className="text-xs text-slate-600 flex justify-between font-medium">
+                                            <span className="flex items-center gap-1">
+                                                <Home className="w-3 h-3 text-slate-500" />
+                                                Max Load Demand
+                                            </span>
+                                        </label>
+                                        <div className="flex items-center gap-2 mt-2">
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                max="20"
+                                                step="0.5"
+                                                value={peakLoadDemand}
+                                                onChange={(e) => setPeakLoadDemand(Math.max(1, Math.min(20, Number(e.target.value))))}
+                                                className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
+                                            />
+                                            <span className="text-xs text-slate-600 font-medium">kW</span>
+                                        </div>
+                                        <p className="text-[10px] text-slate-600 mt-1">Maximum power draw at busiest time (evening). Load varies throughout the day.</p>
                                     </div>
 
                                     {/* Weather Toggle */}
