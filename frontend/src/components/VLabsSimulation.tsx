@@ -92,6 +92,31 @@ interface SimulationResult {
     summary: Summary;
 }
 
+// AI Hint Engine Types
+interface SimulationHistoryItem {
+    eco_score: number;
+    cost_saved_percent: number;
+    grid_reduced_percent: number;
+    battery_utilization: number;
+    solar_utilization: number;
+    battery_empty_during_peak: boolean;
+    battery_full_during_solar: boolean;
+    charging_during_peak: boolean;
+}
+
+interface AIHint {
+    should_show_hint: boolean;
+    hint_title: string;
+    hint_message: string;
+    suggestion_type: "battery" | "solar" | "pricing" | "general";
+    confidence: number;
+}
+
+interface ChatMessage {
+    role: "user" | "assistant";
+    content: string;
+}
+
 export default function VLabsSimulation() {
     // Tab state
     const [activeTab, setActiveTab] = useState<"theory" | "procedure" | "simulation" | "analysis" | "quiz" | "references" | "feedback">("theory");
@@ -128,7 +153,19 @@ export default function VLabsSimulation() {
     const [isEnergyFlowMaximized, setIsEnergyFlowMaximized] = useState(false);
     const [isBillExpanded, setIsBillExpanded] = useState(false);
     const [isBatteryExpanded, setIsBatteryExpanded] = useState(false);
+
+    // AI Hint Engine State
+    const [simulationHistory, setSimulationHistory] = useState<SimulationHistoryItem[]>([]);
+    const [aiHint, setAiHint] = useState<AIHint | null>(null);
+    const [showHintPanel, setShowHintPanel] = useState(false);
+    const [isLoadingHint, setIsLoadingHint] = useState(false);
     const [isCostEfficiencyExpanded, setIsCostEfficiencyExpanded] = useState(false);
+
+    // Chat state
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+    const [chatInput, setChatInput] = useState("");
+    const [isChatLoading, setIsChatLoading] = useState(false);
+    const [showChatMode, setShowChatMode] = useState(false);
 
     // Challenge/Scenario state
     const [showChallengeModal, setShowChallengeModal] = useState(false);
@@ -416,6 +453,169 @@ export default function VLabsSimulation() {
             setIsLoading(false);
         }
     }, [batteryCapacity, solarCapacity, weatherMode, peakLoadDemand, peakPrice, standardPrice, offPeakPrice, initialSoC, currentStep, completedSteps, generateSampleData]);
+
+    // Calculate eco-score and analyze simulation for hints
+    const analyzeSimulationForHints = useCallback((simulationResult: SimulationResult) => {
+        const data = simulationResult.smart_data;
+        const summary = simulationResult.summary;
+
+        // Calculate Eco-Score (0-100)
+        // Factors: cost savings (40%), grid reduction (30%), solar utilization (30%)
+        const costScore = Math.min(100, summary.cost_saved_percent * 2.5); // Max 40 points
+        const gridScore = Math.min(100, summary.grid_reduced_percent * 3.3); // Max 30 points  
+        const totalSolar = data.reduce((sum, h) => sum + h.solar_generation, 0);
+        const usedSolar = data.reduce((sum, h) => sum + Math.min(h.solar_generation, h.load_demand + h.battery_charge), 0);
+        const solarUtilization = totalSolar > 0 ? (usedSolar / totalSolar) * 100 : 0;
+        const solarScore = solarUtilization * 0.3; // Max 30 points
+
+        const ecoScore = Math.round(costScore * 0.4 + gridScore * 0.3 + solarScore);
+
+        // Analyze battery behavior
+        const peakHours = data.filter(h => h.is_peak_hour);
+        const batteryEmptyDuringPeak = peakHours.some(h => h.battery_soc < 25 && h.battery_discharge === 0);
+
+        const solarHours = data.filter(h => h.solar_generation > 1);
+        const batteryFullDuringSolar = solarHours.some(h => h.battery_soc > 95 && h.battery_charge === 0);
+
+        const chargingDuringPeak = peakHours.some(h => h.battery_charge > 0 && h.grid_usage > 0);
+
+        // Battery utilization: how much of battery capacity was actually cycled
+        const maxCharge = Math.max(...data.map(h => h.battery_charge));
+        const maxDischarge = Math.max(...data.map(h => h.battery_discharge));
+        const batteryUtilization = ((maxCharge + maxDischarge) / (summary.battery_capacity_kwh * 2)) * 100;
+
+        const historyItem: SimulationHistoryItem = {
+            eco_score: ecoScore,
+            cost_saved_percent: summary.cost_saved_percent,
+            grid_reduced_percent: summary.grid_reduced_percent,
+            battery_utilization: Math.min(100, batteryUtilization),
+            solar_utilization: solarUtilization,
+            battery_empty_during_peak: batteryEmptyDuringPeak,
+            battery_full_during_solar: batteryFullDuringSolar,
+            charging_during_peak: chargingDuringPeak,
+        };
+
+        // Update history (keep last 5)
+        setSimulationHistory(prev => {
+            const newHistory = [...prev, historyItem].slice(-5);
+            return newHistory;
+        });
+
+        return historyItem;
+    }, []);
+
+    // Check for AI hints after simulation - works immediately after first run
+    const checkForHints = useCallback(async (newHistory: SimulationHistoryItem[]) => {
+        if (newHistory.length < 1) return;
+
+        setIsLoadingHint(true);
+
+        try {
+            const response = await fetch(`${API_URL}/hints`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    simulation_history: newHistory.slice(-5), // Send last 5 for context
+                    current_config: {
+                        battery_capacity: batteryCapacity,
+                        solar_capacity: solarCapacity,
+                        peak_load_demand: peakLoadDemand,
+                        weather_mode: weatherMode,
+                        initial_soc: initialSoC,
+                    },
+                }),
+            });
+
+            if (response.ok) {
+                const hint: AIHint = await response.json();
+                if (hint.should_show_hint) {
+                    setAiHint(hint);
+                    setShowHintPanel(true);
+                }
+            }
+        } catch (err) {
+            console.error("Error fetching AI hint:", err);
+            // Generate fallback hint locally
+            const latest = newHistory[newHistory.length - 1];
+            if (latest.battery_empty_during_peak) {
+                setAiHint({
+                    should_show_hint: true,
+                    hint_title: "💡 Battery Strategy Tip",
+                    hint_message: "I noticed your battery is empty during peak hours. Try charging it at 3 AM when the price is lower!",
+                    suggestion_type: "battery",
+                    confidence: 0.8,
+                });
+                setShowHintPanel(true);
+            }
+        } finally {
+            setIsLoadingHint(false);
+        }
+    }, [batteryCapacity, solarCapacity, peakLoadDemand, weatherMode, initialSoC]);
+
+    // Chat with AI assistant
+    const sendChatMessage = useCallback(async (message: string) => {
+        if (!message.trim()) return;
+
+        const userMessage: ChatMessage = { role: "user", content: message };
+        setChatMessages(prev => [...prev, userMessage]);
+        setChatInput("");
+        setIsChatLoading(true);
+
+        // Compute eco score from history
+        const latestEcoScore = simulationHistory.length > 0
+            ? simulationHistory[simulationHistory.length - 1].eco_score
+            : null;
+
+        try {
+            const response = await fetch(`${API_URL}/chat`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    messages: [...chatMessages, userMessage],
+                    simulation_context: {
+                        battery_capacity: batteryCapacity,
+                        solar_capacity: solarCapacity,
+                        peak_load_demand: peakLoadDemand,
+                        weather_mode: weatherMode,
+                        initial_soc: initialSoC,
+                        eco_score: latestEcoScore,
+                    },
+                }),
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                const assistantMessage: ChatMessage = { role: "assistant", content: data.response };
+                setChatMessages(prev => [...prev, assistantMessage]);
+            } else {
+                setChatMessages(prev => [...prev, {
+                    role: "assistant",
+                    content: "Sorry, I couldn't process your question. Please try again."
+                }]);
+            }
+        } catch (err) {
+            console.error("Chat error:", err);
+            setChatMessages(prev => [...prev, {
+                role: "assistant",
+                content: "Connection error. Please check if the server is running."
+            }]);
+        } finally {
+            setIsChatLoading(false);
+        }
+    }, [chatMessages, batteryCapacity, solarCapacity, peakLoadDemand, weatherMode, initialSoC, simulationHistory]);
+
+    // Effect to analyze simulation results and check for hints
+    useEffect(() => {
+        if (result && !reportCardShown) {
+            const historyItem = analyzeSimulationForHints(result);
+            // Check for hints after adding to history
+            setSimulationHistory(prev => {
+                const newHistory = [...prev.slice(-4), historyItem];
+                checkForHints(newHistory);
+                return newHistory;
+            });
+        }
+    }, [result, reportCardShown, analyzeSimulationForHints, checkForHints]);
 
     // Silent update - just update data without restarting animation (for parameter changes)
     const updateSimulationData = useCallback(async () => {
@@ -832,8 +1032,270 @@ export default function VLabsSimulation() {
         }
     };
 
+    // Get hint icon based on suggestion type
+    const getHintIcon = (type: string) => {
+        switch (type) {
+            case "battery": return "🔋";
+            case "solar": return "☀️";
+            case "pricing": return "💰";
+            default: return "💡";
+        }
+    };
+
+    // Get current eco-score from latest history
+    const currentEcoScore = simulationHistory.length > 0
+        ? simulationHistory[simulationHistory.length - 1].eco_score
+        : null;
+
     return (
         <div className="min-h-screen bg-gray-50">
+            {/* AI Lab Assistant Panel - Minimal Theme with Chat */}
+            {showHintPanel && (
+                <div className="fixed right-4 top-1/2 -translate-y-1/2 z-50 animate-in slide-in-from-right duration-300">
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-lg w-80 max-h-[600px] flex flex-col overflow-hidden">
+                        {/* Minimal Header */}
+                        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                            <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center">
+                                    <Lightbulb className="w-4 h-4 text-white" />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-semibold text-slate-900">Lab Assistant</h3>
+                                    <p className="text-[10px] text-slate-500">Powered by AI</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    setShowHintPanel(false);
+                                    setShowChatMode(false);
+                                }}
+                                className="p-1.5 hover:bg-slate-200 rounded-lg transition-colors"
+                            >
+                                <X className="w-4 h-4 text-slate-500" />
+                            </button>
+                        </div>
+
+                        {/* Content Area */}
+                        {!showChatMode ? (
+                            // Hint View
+                            <div className="p-4 flex-1 overflow-y-auto">
+                                {aiHint && (
+                                    <>
+                                        {/* Hint Card */}
+                                        <div className="bg-slate-50 rounded-lg p-3 mb-3">
+                                            <div className="flex items-start gap-2 mb-2">
+                                                <span className="text-lg">{getHintIcon(aiHint.suggestion_type)}</span>
+                                                <h4 className="text-sm font-medium text-slate-900 leading-tight">{aiHint.hint_title}</h4>
+                                            </div>
+                                            <p className="text-xs text-slate-600 leading-relaxed">
+                                                {aiHint.hint_message}
+                                            </p>
+                                        </div>
+
+                                        {/* Eco-Score */}
+                                        {currentEcoScore !== null && (
+                                            <div className="mb-3">
+                                                <div className="flex items-center justify-between mb-1.5">
+                                                    <span className="text-xs text-slate-500">Eco-Score</span>
+                                                    <span className={`text-xs font-semibold ${currentEcoScore >= 70 ? "text-emerald-600" :
+                                                        currentEcoScore >= 50 ? "text-amber-600" : "text-red-600"
+                                                        }`}>
+                                                        {currentEcoScore}/100
+                                                    </span>
+                                                </div>
+                                                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                    <div
+                                                        className={`h-full transition-all duration-500 ${currentEcoScore >= 70 ? "bg-emerald-500" :
+                                                            currentEcoScore >= 50 ? "bg-amber-500" : "bg-red-500"
+                                                            }`}
+                                                        style={{ width: `${currentEcoScore}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Run History */}
+                                        {simulationHistory.length > 1 && (
+                                            <div className="flex items-center gap-1.5 mb-3">
+                                                <span className="text-[10px] text-slate-400">History:</span>
+                                                {simulationHistory.slice(-5).map((h, i) => (
+                                                    <div
+                                                        key={i}
+                                                        className={`w-2 h-2 rounded-full ${h.eco_score >= 70 ? "bg-emerald-500" :
+                                                            h.eco_score >= 50 ? "bg-amber-500" : "bg-red-500"
+                                                            }`}
+                                                        title={`Run ${i + 1}: ${h.eco_score.toFixed(0)}`}
+                                                    />
+                                                ))}
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+
+                                {/* Quick Questions */}
+                                <div className="space-y-1.5">
+                                    <p className="text-[10px] text-slate-400 uppercase tracking-wide">Quick questions</p>
+                                    {[
+                                        "How do I improve my eco-score?",
+                                        "Explain peak vs off-peak pricing",
+                                        "Best battery charging strategy?"
+                                    ].map((q, i) => (
+                                        <button
+                                            key={i}
+                                            onClick={() => {
+                                                setShowChatMode(true);
+                                                sendChatMessage(q);
+                                            }}
+                                            className="w-full text-left text-xs px-3 py-2 bg-slate-50 hover:bg-slate-100 rounded-lg text-slate-700 transition-colors"
+                                        >
+                                            {q}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : (
+                            // Chat View
+                            <div className="flex-1 flex flex-col min-h-0">
+                                {/* Chat Messages */}
+                                <div className="flex-1 overflow-y-auto p-3 space-y-3">
+                                    {chatMessages.length === 0 && (
+                                        <div className="text-center py-8">
+                                            <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                                                <MessageSquare className="w-6 h-6 text-slate-400" />
+                                            </div>
+                                            <p className="text-xs text-slate-500">Ask me anything about microgrids!</p>
+                                        </div>
+                                    )}
+                                    {chatMessages.map((msg, i) => (
+                                        <div
+                                            key={i}
+                                            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                                        >
+                                            <div
+                                                className={`max-w-[85%] px-3 py-2 rounded-lg text-xs ${msg.role === "user"
+                                                    ? "bg-slate-900 text-white"
+                                                    : "bg-slate-100 text-slate-700"
+                                                    }`}
+                                            >
+                                                {msg.content}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {isChatLoading && (
+                                        <div className="flex justify-start">
+                                            <div className="bg-slate-100 px-3 py-2 rounded-lg">
+                                                <div className="flex gap-1">
+                                                    <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                                                    <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                                                    <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Chat Input */}
+                                <div className="p-3 border-t border-slate-100">
+                                    <form
+                                        onSubmit={(e) => {
+                                            e.preventDefault();
+                                            sendChatMessage(chatInput);
+                                        }}
+                                        className="flex gap-2"
+                                    >
+                                        <input
+                                            type="text"
+                                            value={chatInput}
+                                            onChange={(e) => setChatInput(e.target.value)}
+                                            placeholder="Ask a question..."
+                                            className="flex-1 px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-slate-400 focus:border-slate-400
+                                            text-black
+                                            "
+                                            disabled={isChatLoading}
+                                        />
+                                        <button
+                                            type="submit"
+                                            disabled={!chatInput.trim() || isChatLoading}
+                                            className="px-3 py-2 bg-slate-900 text-white rounded-lg text-xs font-medium hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        >
+                                            Send
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Footer Actions */}
+                        <div className="px-3 py-2 border-t border-slate-100 flex gap-2">
+                            {showChatMode ? (
+                                <>
+                                    <button
+                                        onClick={() => setShowChatMode(false)}
+                                        className="flex-1 py-1.5 text-xs text-slate-600 hover:bg-slate-50 rounded-lg transition-colors"
+                                    >
+                                        ← Back to tips
+                                    </button>
+                                    <button
+                                        onClick={() => setChatMessages([])}
+                                        className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-colors"
+                                    >
+                                        Clear
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    <button
+                                        onClick={() => setShowChatMode(true)}
+                                        className="flex-1 py-1.5 text-xs bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors flex items-center justify-center gap-1.5"
+                                    >
+                                        <MessageSquare className="w-3 h-3" />
+                                        Ask a question
+                                    </button>
+                                    <button
+                                        onClick={() => setShowHintPanel(false)}
+                                        className="px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-50 rounded-lg transition-colors"
+                                    >
+                                        Dismiss
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Eco-Score Badge (always visible when simulation has run) */}
+            {currentEcoScore !== null && activeTab === "simulation" && (
+                <div className="fixed bottom-4 right-4 z-40">
+                    <button
+                        onClick={() => {
+                            setShowHintPanel(true);
+                            if (simulationHistory.length >= 1) {
+                                checkForHints(simulationHistory);
+                            }
+                        }}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg shadow-md border transition-all hover:scale-105 ${currentEcoScore >= 70
+                            ? "bg-white border-emerald-200 text-emerald-700"
+                            : currentEcoScore >= 50
+                                ? "bg-white border-amber-200 text-amber-700"
+                                : "bg-white border-red-200 text-red-700"
+                            }`}
+                        title="Click for AI tips"
+                    >
+                        <div className="relative">
+                            <Lightbulb className="w-4 h-4" />
+                            {isLoadingHint && (
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                    <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                </div>
+                            )}
+                        </div>
+                        <span className="font-medium text-xs">Eco: {currentEcoScore.toFixed(0)}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 rounded text-slate-500">AI Tips</span>
+                    </button>
+                </div>
+            )}
+
             {/* Challenge Selection Modal */}
             {showChallengeModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
