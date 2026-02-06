@@ -39,6 +39,10 @@ class SimulationConfig:
     standard_price: float = 6.50        # Standard (06:00-18:00): ₹6.50/kWh
     peak_price: float = 8.50            # Peak (18:00-22:00): ₹8.50/kWh
     peak_hours: tuple = (18, 22)        # Peak pricing hours (6 PM - 10 PM)
+    # Tariff mode (manual vs DERC official)
+    tariff_mode: str = "manual"         # "manual" | "derc"
+    derc_season: str = "summer"         # "summer" | "winter"
+    derc_discom: str = "TPDDL"          # "TPDDL" | "BRPL" | "BYPL" | "NDMC"
 
 
 class MicrogridSimulator:
@@ -119,26 +123,81 @@ class MicrogridSimulator:
         self.load_profile = np.round(load, 2)
     
     def _generate_price_profile(self) -> None:
-        """
-        Generate 3-tier time-of-use electricity pricing for Delhi.
-        
-        Off-Peak (00:00-06:00): ₹4.00/kWh - Night rates
-        Standard (06:00-18:00): ₹6.50/kWh - Daytime rates
-        Peak (18:00-22:00): ₹8.50/kWh - Evening peak rates
-        """
+        """Generate hourly electricity pricing based on tariff mode."""
         price = np.zeros(24)
         
         for h in range(24):
-            if h < 6:  # Off-peak: 00:00-06:00
-                price[h] = self.config.off_peak_price
-            elif h < 18:  # Standard: 06:00-18:00
-                price[h] = self.config.standard_price
-            elif h < 22:  # Peak: 18:00-22:00
-                price[h] = self.config.peak_price
-            else:  # Off-peak: 22:00-24:00
-                price[h] = self.config.off_peak_price
+            price[h] = self._get_price_for_hour(h)
         
         self.price_profile = price
+
+    def _in_range(self, hour: int, start: int, end: int) -> bool:
+        return (start <= hour < end) if start < end else (hour >= start or hour < end)
+
+    def _get_derc_slot(self, hour: int) -> str:
+        season = self.config.derc_season
+        discom = self.config.derc_discom
+
+        if season == "summer":
+            if discom == "NDMC":
+                if self._in_range(hour, 11, 17):
+                    return "peak"
+                if self._in_range(hour, 2, 8):
+                    return "offpeak"
+                return "normal"
+
+            if self._in_range(hour, 14, 17) or self._in_range(hour, 22, 1):
+                return "peak"
+            if self._in_range(hour, 4, 10):
+                return "offpeak"
+            return "normal"
+
+        if discom == "BRPL":
+            if self._in_range(hour, 9, 14):
+                return "peak"
+            if self._in_range(hour, 0, 7):
+                return "offpeak"
+            return "normal"
+
+        if discom == "BYPL":
+            if self._in_range(hour, 9, 13) or self._in_range(hour, 17, 20):
+                return "peak"
+            if self._in_range(hour, 0, 5):
+                return "offpeak"
+            return "normal"
+
+        if self._in_range(hour, 7, 13) or self._in_range(hour, 18, 20):
+            return "peak"
+        if self._in_range(hour, 22, 6):
+            return "offpeak"
+        return "normal"
+
+    def _get_manual_slot(self, hour: int) -> str:
+        if 14 <= hour < 22:
+            return "peak"
+        if 6 <= hour < 14:
+            return "normal"
+        return "offpeak"
+
+    def _get_tariff_slot(self, hour: int) -> str:
+        return self._get_derc_slot(hour) if self.config.tariff_mode == "derc" else self._get_manual_slot(hour)
+
+    def _get_price_for_hour(self, hour: int) -> float:
+        slot = self._get_tariff_slot(hour)
+
+        if self.config.tariff_mode == "derc":
+            base = self.config.standard_price
+            if slot == "peak":
+                return base * 1.2
+            if slot == "offpeak":
+                return base * 0.8
+            return base
+
+        if slot == "peak":
+            return self.config.peak_price
+        if slot == "offpeak":
+            return self.config.off_peak_price
+        return self.config.standard_price
     
     def simulate_baseline(self) -> List[Dict[str, Any]]:
         """
@@ -180,7 +239,7 @@ class MicrogridSimulator:
                 "battery_soc": round(self.config.initial_soc * 100, 1),  # Static SoC
                 "grid_price": round(price, 3),
                 "hourly_cost": round(cost, 3),
-                "is_peak_hour": bool(self.config.peak_hours[0] <= hour < self.config.peak_hours[1])
+                "is_peak_hour": self._get_tariff_slot(hour) == "peak"
             })
         
         return results
@@ -219,7 +278,7 @@ class MicrogridSimulator:
             solar = self.solar_profile[hour]
             load = self.load_profile[hour]
             price = self.price_profile[hour]
-            is_peak = self.config.peak_hours[0] <= hour < self.config.peak_hours[1]
+            is_peak = self._get_tariff_slot(hour) == "peak"
             
             # Initialize hourly values
             solar_used = 0.0

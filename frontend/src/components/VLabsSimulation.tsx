@@ -136,6 +136,10 @@ export default function VLabsSimulation() {
     const [offPeakPrice, setOffPeakPrice] = useState(4);
     const [standardPrice, setStandardPrice] = useState(6.5);
     const [peakPrice, setPeakPrice] = useState(8.5);
+    // Tariff mode (manual vs DERC)
+    const [tariffMode, setTariffMode] = useState<"manual" | "derc">("manual");
+    const [dercSeason, setDercSeason] = useState<"summer" | "winter">("summer");
+    const [dercDiscom, setDercDiscom] = useState<"TPDDL" | "BRPL" | "BYPL" | "NDMC">("TPDDL");
 
     // Simulation state
     const [isLoading, setIsLoading] = useState(false);
@@ -332,6 +336,57 @@ export default function VLabsSimulation() {
         }
     };
 
+    const inRange = (hour: number, start: number, end: number) =>
+        start < end ? hour >= start && hour < end : hour >= start || hour < end;
+
+    const getDercSlot = (hour: number): "peak" | "offpeak" | "normal" => {
+        if (dercSeason === "summer") {
+            if (dercDiscom === "NDMC") {
+                if (inRange(hour, 11, 17)) return "peak";
+                if (inRange(hour, 2, 8)) return "offpeak";
+                return "normal";
+            }
+            if (inRange(hour, 14, 17) || inRange(hour, 22, 1)) return "peak";
+            if (inRange(hour, 4, 10)) return "offpeak";
+            return "normal";
+        }
+
+        if (dercDiscom === "BRPL") {
+            if (inRange(hour, 9, 14)) return "peak";
+            if (inRange(hour, 0, 7)) return "offpeak";
+            return "normal";
+        }
+        if (dercDiscom === "BYPL") {
+            if (inRange(hour, 9, 13) || inRange(hour, 17, 20)) return "peak";
+            if (inRange(hour, 0, 5)) return "offpeak";
+            return "normal";
+        }
+        if (inRange(hour, 7, 13) || inRange(hour, 18, 20)) return "peak";
+        if (inRange(hour, 22, 6)) return "offpeak";
+        return "normal";
+    };
+
+    const getManualSlot = (hour: number): "peak" | "offpeak" | "normal" => {
+        if (hour >= 14 && hour < 22) return "peak";
+        if (hour >= 6 && hour < 14) return "normal";
+        return "offpeak";
+    };
+
+    const getTariffSlot = (hour: number) =>
+        tariffMode === "derc" ? getDercSlot(hour) : getManualSlot(hour);
+
+    const getPriceForHour = (hour: number) => {
+        const slot = getTariffSlot(hour);
+        if (tariffMode === "derc") {
+            const base = standardPrice;
+            const factor = slot === "peak" ? 1.2 : slot === "offpeak" ? 0.8 : 1.0;
+            return Math.round(base * factor * 100) / 100;
+        }
+        if (slot === "peak") return peakPrice;
+        if (slot === "offpeak") return offPeakPrice;
+        return standardPrice;
+    };
+
     // Generate sample data when API is unavailable
     const generateSampleData = useCallback(() => {
         const generateHourlyData = (isBaseline: boolean): HourlyData[] => {
@@ -353,8 +408,9 @@ export default function VLabsSimulation() {
                 const baseLoadProfile = [1.5, 1.5, 1.5, 1.5, 2.0, 2.5, 3.5, 4.0, 4.5, 3.5, 3.0, 2.5, 2.5, 2.5, 3.0, 3.5, 4.0, 5.0, 6.5, 7.0, 6.5, 5.5, 4.0, 2.5][hour];
                 // Scale load based on user's peak demand (7kW is the base peak)
                 const load = baseLoadProfile * (peakLoadDemand / 7.0);
-                const isPeak = hour >= 14 && hour < 22;
-                const price = isPeak ? peakPrice : offPeakPrice;
+                const slot = getTariffSlot(hour);
+                const isPeak = slot === "peak";
+                const price = getPriceForHour(hour);
 
                 let gridUsage = 0;
                 let batteryCharge = 0;
@@ -418,7 +474,7 @@ export default function VLabsSimulation() {
 
         setCurrentHour(0);
         setIsPlaying(true);
-    }, [batteryCapacity, solarCapacity, weatherMode, peakLoadDemand, initialSoC, peakPrice, offPeakPrice]);
+    }, [batteryCapacity, solarCapacity, weatherMode, peakLoadDemand, initialSoC, peakPrice, offPeakPrice, standardPrice, tariffMode, dercSeason, dercDiscom]);
 
     // Run simulation
     const runSimulation = useCallback(async () => {
@@ -438,6 +494,9 @@ export default function VLabsSimulation() {
                     standard_price: standardPrice,
                     peak_price: peakPrice,
                     initial_soc: initialSoC / 100,
+                    tariff_mode: tariffMode,
+                    derc_season: dercSeason,
+                    derc_discom: dercDiscom,
                 }),
             });
 
@@ -456,7 +515,7 @@ export default function VLabsSimulation() {
         } finally {
             setIsLoading(false);
         }
-    }, [batteryCapacity, solarCapacity, weatherMode, peakLoadDemand, peakPrice, standardPrice, offPeakPrice, initialSoC, currentStep, completedSteps, generateSampleData]);
+    }, [batteryCapacity, solarCapacity, weatherMode, peakLoadDemand, peakPrice, standardPrice, offPeakPrice, initialSoC, tariffMode, dercSeason, dercDiscom, currentStep, completedSteps, generateSampleData]);
 
     // Calculate eco-score and analyze simulation for hints
     const analyzeSimulationForHints = useCallback((simulationResult: SimulationResult) => {
@@ -636,6 +695,9 @@ export default function VLabsSimulation() {
                     standard_price: standardPrice,
                     peak_price: peakPrice,
                     initial_soc: initialSoC / 100,
+                    tariff_mode: tariffMode,
+                    derc_season: dercSeason,
+                    derc_discom: dercDiscom,
                 }),
             });
 
@@ -659,8 +721,9 @@ export default function VLabsSimulation() {
                     const baseLoadProfile = [1.5, 1.5, 1.5, 1.5, 2.0, 2.5, 3.5, 4.0, 4.5, 3.5, 3.0, 2.5, 2.5, 2.5, 3.0, 3.5, 4.0, 5.0, 6.5, 7.0, 6.5, 5.5, 4.0, 2.5][hour];
                     // Scale load based on user's peak demand (7kW is the base peak)
                     const load = baseLoadProfile * (peakLoadDemand / 7.0);
-                    const isPeak = hour >= 14 && hour < 22;
-                    const price = isPeak ? peakPrice : offPeakPrice;
+                    const slot = getTariffSlot(hour);
+                    const isPeak = slot === "peak";
+                    const price = getPriceForHour(hour);
 
                     let gridUsage = 0;
                     let batteryCharge = 0;
@@ -722,7 +785,7 @@ export default function VLabsSimulation() {
                 },
             });
         }
-    }, [batteryCapacity, solarCapacity, weatherMode, peakLoadDemand, peakPrice, standardPrice, offPeakPrice, initialSoC]);
+    }, [batteryCapacity, solarCapacity, weatherMode, peakLoadDemand, peakPrice, standardPrice, offPeakPrice, initialSoC, tariffMode, dercSeason, dercDiscom]);
 
     // Auto-run simulation when parameters change (debounced) - silent update only
     useEffect(() => {
@@ -781,7 +844,7 @@ export default function VLabsSimulation() {
         const totalLoad = activeData.reduce((sum, h) => sum + h.load_demand, 0);
 
         // CO2 saved: ~0.82 kg CO2 per kWh of solar used instead of grid (India avg)
-        const co2Saved = totalSolar * 0.82;
+        const co2Saved = totalSolar * 0.7;
 
         // Self-sufficiency: (Solar Used / Total Load) * 100
         const selfSufficiency = Math.min(100, (totalSolar / totalLoad) * 100);
@@ -1696,7 +1759,7 @@ export default function VLabsSimulation() {
                                         <div className="flex justify-between items-center pt-3 border-t border-red-100 text-xs">
                                             <div>
                                                 <div className="text-red-400 font-medium">Current Tariff</div>
-                                                <div className="text-red-700 font-bold">₹{(currentData.is_peak_hour ? peakPrice : offPeakPrice).toFixed(2)}/kWh</div>
+                                                <div className="text-red-700 font-bold">₹{getPriceForHour(currentHour).toFixed(2)}/kWh</div>
                                             </div>
                                             <div className="text-right">
                                                 <div className="text-red-400 font-medium">Grid Power</div>
@@ -1897,11 +1960,17 @@ export default function VLabsSimulation() {
                                             onChange={(e) => setCurrentHour(Number(e.target.value))}
                                             className="flex-1 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
                                         />
-                                        <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${currentData.is_peak_hour
+                                        <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${getTariffSlot(currentHour) === "peak"
                                             ? "bg-red-50 text-red-600 border-red-100"
-                                            : "bg-emerald-50 text-emerald-600 border-emerald-100"
+                                            : getTariffSlot(currentHour) === "offpeak"
+                                                ? "bg-emerald-50 text-emerald-600 border-emerald-100"
+                                                : "bg-slate-50 text-slate-600 border-slate-200"
                                             }`}>
-                                            {currentData.is_peak_hour ? "Peak Price" : "Off-Peak"}
+                                            {getTariffSlot(currentHour) === "peak"
+                                                ? "Peak Price"
+                                                : getTariffSlot(currentHour) === "offpeak"
+                                                    ? "Off-Peak"
+                                                    : "Standard"}
                                         </span>
                                     </div>
                                 </div>
@@ -2184,17 +2253,65 @@ export default function VLabsSimulation() {
                                         />
                                     </div>
 
-                                    {/* 3-Tier Pricing - Editable Input Fields */}
+                                    {/* Time-of-Day Tariff */}
                                     <div className="bg-slate-50 rounded border border-slate-200 p-3">
                                         <label className="text-xs text-slate-500 mb-3 block flex items-center gap-1 font-medium">
                                             <Zap className="w-3 h-3" />
                                             Time-of-Day Tariff (₹/kWh)
                                         </label>
+
+                                        <div className="mb-3">
+                                            <label className="text-xs text-slate-600 font-medium mb-1 block">Tariff Mode</label>
+                                            <select
+                                                value={tariffMode}
+                                                onChange={(e) => setTariffMode(e.target.value as "manual" | "derc")}
+                                                className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-slate-900"
+                                            >
+                                                <option value="manual">Manual (custom prices)</option>
+                                                <option value="derc">DERC Official (Delhi)</option>
+                                            </select>
+                                        </div>
+
+                                        {tariffMode === "derc" && (
+                                            <div className="grid grid-cols-2 gap-2 mb-3">
+                                                <div>
+                                                    <label className="text-xs text-slate-600 font-medium mb-1 block">Season</label>
+                                                    <select
+                                                        value={dercSeason}
+                                                        onChange={(e) => setDercSeason(e.target.value as "summer" | "winter")}
+                                                        className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-slate-900"
+                                                    >
+                                                        <option value="summer">Summer (May–Sep)</option>
+                                                        <option value="winter">Winter (Nov–Mar)</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs text-slate-600 font-medium mb-1 block">DISCOM</label>
+                                                    <select
+                                                        value={dercDiscom}
+                                                        onChange={(e) => setDercDiscom(e.target.value as "TPDDL" | "BRPL" | "BYPL" | "NDMC")}
+                                                        className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-slate-900"
+                                                    >
+                                                        <option value="TPDDL">TPDDL</option>
+                                                        <option value="BRPL">BRPL</option>
+                                                        <option value="BYPL">BYPL</option>
+                                                        <option value="NDMC">NDMC</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {tariffMode === "derc" && (
+                                            <p className="text-[10px] text-slate-500 mb-2">
+                                                Source: Delhi Electricity Regulatory Commission (DERC) ToD tariff (FY 2018–19)
+                                            </p>
+                                        )}
+
                                         <div className="space-y-3">
                                             {/* Off-Peak Price */}
                                             <div>
                                                 <label className="text-xs text-slate-600 font-medium mb-1 block">
-                                                    <span className="text-blue-600">Off-Peak (0-14h, 22-24h)</span>
+                                                    <span className="text-blue-600">Off-Peak</span>
                                                 </label>
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-slate-600 text-xs">₹</span>
@@ -2205,7 +2322,8 @@ export default function VLabsSimulation() {
                                                         step="0.5"
                                                         value={offPeakPrice}
                                                         onChange={(e) => setOffPeakPrice(Number(e.target.value))}
-                                                        className="flex-1 px-2 py-1.5 border border-blue-200 rounded text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                        disabled={tariffMode === "derc"}
+                                                        className="flex-1 px-2 py-1.5 border border-blue-200 rounded text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
                                                     />
                                                     <span className="text-slate-500 text-xs">/kWh</span>
                                                 </div>
@@ -2214,7 +2332,7 @@ export default function VLabsSimulation() {
                                             {/* Standard Price */}
                                             <div>
                                                 <label className="text-xs text-slate-600 font-medium mb-1 block">
-                                                    <span className="text-slate-600">Standard (6-14h)</span>
+                                                    <span className="text-slate-600">Standard</span>
                                                 </label>
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-slate-600 text-xs">₹</span>
@@ -2234,7 +2352,7 @@ export default function VLabsSimulation() {
                                             {/* Peak Price */}
                                             <div>
                                                 <label className="text-xs text-slate-600 font-medium mb-1 block">
-                                                    <span className="text-red-600">Peak (14-22h)</span>
+                                                    <span className="text-red-600">Peak</span>
                                                 </label>
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-slate-600 text-xs">₹</span>
@@ -2245,7 +2363,8 @@ export default function VLabsSimulation() {
                                                         step="0.5"
                                                         value={peakPrice}
                                                         onChange={(e) => setPeakPrice(Number(e.target.value))}
-                                                        className="flex-1 px-2 py-1.5 border border-red-200 rounded text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
+                                                        disabled={tariffMode === "derc"}
+                                                        className="flex-1 px-2 py-1.5 border border-red-200 rounded text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-60"
                                                     />
                                                     <span className="text-slate-500 text-xs">/kWh</span>
                                                 </div>
@@ -3104,17 +3223,17 @@ function ReferencesContent({
                 {
                     title: "A review of smart energy management systems in microgrids",
                     desc: "C. Chen et al., Renewable and Sustainable Energy Reviews, vol. 60, pp. 1163–1178, 2017.",
-                    link: "#"
+                    link: "https://www.mdpi.com/2076-3417/14/3/1249"
                 },
                 {
                     title: "Energy management systems for microgrids: A review",
                     desc: "W. Shi et al., Wiley Interdisciplinary Reviews: Energy and Environment, 2015.",
-                    link: "#"
+                    link: "https://www.mdpi.com/2071-1050/13/19/10492"
                 },
                 {
                     title: "Microgrids: Architectures and Control",
                     desc: "N. Hatziargyriou et al., IEEE Power and Energy Magazine, 2007.",
-                    link: "#"
+                    link: "https://web.nit.ac.ir/~shahabi.m/M.Sc%20and%20PhD%20materials/DGs%20and%20MicroGrids%20Course/Books/Microgrids-Architectures%20and%20Control%20by%20Nikos%20Hatziargyriou/Microgrids_%20Architectures%20and%20Control-Wiley-IEEE%20Press%202014_by%20Nikos%20Hatziargyriou.pdf"
                 }
             ]
         },
@@ -3124,7 +3243,7 @@ function ReferencesContent({
                 {
                     title: "Microgrids: Architectures and Control",
                     desc: "N. Hatziargyriou, Wiley-IEEE Press, 2014. ISBN: 978-1-118-72068-4",
-                    link: "#"
+                    link: "https://www.wiley.com/en-us/Microgrids%3A+Architectures+and+Control-p-9781118720684"
                 }
             ]
         }

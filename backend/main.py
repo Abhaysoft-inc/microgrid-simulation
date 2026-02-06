@@ -110,6 +110,18 @@ class SimulationRequest(BaseModel):
         le=1.0,
         description="Initial battery State of Charge (0.2-1.0)"
     )
+    tariff_mode: Optional[str] = Field(
+        default="manual",
+        description="Tariff mode: 'manual' or 'derc'"
+    )
+    derc_season: Optional[str] = Field(
+        default="summer",
+        description="DERC season: 'summer' or 'winter'"
+    )
+    derc_discom: Optional[str] = Field(
+        default="TPDDL",
+        description="DERC DISCOM: 'TPDDL', 'BRPL', 'BYPL', 'NDMC'"
+    )
 
     class Config:
         json_schema_extra = {
@@ -121,7 +133,10 @@ class SimulationRequest(BaseModel):
                 "off_peak_price": 4.00,
                 "standard_price": 6.50,
                 "peak_price": 8.50,
-                "initial_soc": 0.50
+                "initial_soc": 0.50,
+                "tariff_mode": "manual",
+                "derc_season": "summer",
+                "derc_discom": "TPDDL"
             }
         }
 
@@ -164,7 +179,10 @@ async def run_simulation(request: SimulationRequest = None):
             off_peak_price=request.off_peak_price,
             standard_price=request.standard_price,
             peak_price=request.peak_price,
-            initial_soc=request.initial_soc
+            initial_soc=request.initial_soc,
+            tariff_mode=request.tariff_mode,
+            derc_season=request.derc_season,
+            derc_discom=request.derc_discom
         )
         
         # Run simulation
