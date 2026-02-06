@@ -1403,6 +1403,96 @@ export default function VLabsSimulation() {
                                         </span>
                                     </div>
                                 </div>
+
+                                {/* Dynamic Power Source Info */}
+                                <div className="p-3 border-t border-slate-200 bg-gradient-to-r from-slate-50 to-white">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                                        <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Active Power Sources</span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {/* Solar Source */}
+                                        {currentData.solar_generation > 0 && (
+                                            <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full">
+                                                <Sun className="w-3.5 h-3.5 text-amber-500" />
+                                                <span className="text-xs font-medium text-amber-700">
+                                                    Solar: {currentData.solar_generation.toFixed(1)} kW
+                                                </span>
+                                                {currentData.solar_generation >= currentData.load_demand && (
+                                                    <span className="text-[10px] bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded-full font-semibold">PRIMARY</span>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Grid Source */}
+                                        {currentData.grid_usage > 0 && (
+                                            <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-full">
+                                                <Zap className="w-3.5 h-3.5 text-indigo-500" />
+                                                <span className="text-xs font-medium text-indigo-700">
+                                                    Grid: {currentData.grid_usage.toFixed(1)} kW
+                                                </span>
+                                                {currentData.grid_usage > currentData.solar_generation && currentData.battery_discharge === 0 && (
+                                                    <span className="text-[10px] bg-indigo-200 text-indigo-800 px-1.5 py-0.5 rounded-full font-semibold">PRIMARY</span>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Battery Discharging */}
+                                        {currentData.battery_discharge > 0 && (
+                                            <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-full">
+                                                <Battery className="w-3.5 h-3.5 text-emerald-500" />
+                                                <span className="text-xs font-medium text-emerald-700">
+                                                    Battery: {currentData.battery_discharge.toFixed(1)} kW
+                                                </span>
+                                                <span className="text-[10px] bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded-full font-semibold">DISCHARGING</span>
+                                            </div>
+                                        )}
+
+                                        {/* Battery Charging */}
+                                        {currentData.battery_charge > 0 && (
+                                            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-full">
+                                                <Battery className="w-3.5 h-3.5 text-blue-500" />
+                                                <span className="text-xs font-medium text-blue-700">
+                                                    Charging: {currentData.battery_charge.toFixed(1)} kW
+                                                </span>
+                                                <span className="text-[10px] bg-blue-200 text-blue-800 px-1.5 py-0.5 rounded-full font-semibold">STORING</span>
+                                            </div>
+                                        )}
+
+                                        {/* Night time - no solar */}
+                                        {currentData.solar_generation === 0 && currentData.grid_usage === 0 && currentData.battery_discharge === 0 && (
+                                            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-full">
+                                                <span className="text-xs font-medium text-slate-500">No active power flow</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Power Flow Summary */}
+                                    <div className="mt-3 pt-3 border-t border-slate-100">
+                                        <p className="text-xs text-slate-600">
+                                            {currentData.solar_generation > 0 && currentData.solar_generation >= currentData.load_demand ? (
+                                                <span className="text-amber-600 font-medium">
+                                                    ☀️ Solar is fully powering the load ({currentData.load_demand.toFixed(1)} kW).
+                                                    {currentData.battery_charge > 0 && ` Excess ${currentData.battery_charge.toFixed(1)} kW is charging the battery.`}
+                                                </span>
+                                            ) : currentData.solar_generation > 0 && currentData.grid_usage > 0 ? (
+                                                <span className="text-indigo-600 font-medium">
+                                                    ⚡ Solar provides {currentData.solar_generation.toFixed(1)} kW, Grid supplements {currentData.grid_usage.toFixed(1)} kW to meet {currentData.load_demand.toFixed(1)} kW demand.
+                                                </span>
+                                            ) : currentData.battery_discharge > 0 ? (
+                                                <span className="text-emerald-600 font-medium">
+                                                    🔋 Battery discharging {currentData.battery_discharge.toFixed(1)} kW during peak hours to reduce grid dependency.
+                                                </span>
+                                            ) : currentData.grid_usage > 0 ? (
+                                                <span className="text-slate-600 font-medium">
+                                                    🌙 Night time: Grid is the primary power source ({currentData.grid_usage.toFixed(1)} kW).
+                                                </span>
+                                            ) : (
+                                                <span className="text-slate-500">Waiting for simulation data...</span>
+                                            )}
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
 
                             {/* Current Stats Below Visualization */}

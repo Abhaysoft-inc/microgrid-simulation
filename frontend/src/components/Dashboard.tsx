@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useCallback, useEffect } from "react";
-import { Cpu, Activity, Zap, MoreVertical } from "lucide-react";
+import { FiCpu, FiActivity, FiZap, FiMoreVertical } from "react-icons/fi";
 
 import dynamic from "next/dynamic";
 import ControlPanel from "./ControlPanel";
@@ -171,7 +171,7 @@ export default function Dashboard() {
                             <div className="relative">
                                 <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-xl blur-lg opacity-50" />
                                 <div className="relative p-3 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl shadow-lg">
-                                    <Cpu className="w-8 h-8 text-white" />
+                                    <FiCpu className="w-8 h-8 text-white" />
                                 </div>
                             </div>
                             <div>
@@ -179,7 +179,7 @@ export default function Dashboard() {
                                     Microgrid Digital Twin
                                 </h1>
                                 <p className="text-sm text-slate-400 flex items-center gap-2">
-                                    <Activity className="w-4 h-4 text-emerald-400 animate-pulse" />
+                                    <FiActivity className="w-4 h-4 text-emerald-400 animate-pulse" />
                                     24-Hour Energy Scheduler & Optimizer • Delhi, India
                                 </p>
                             </div>
@@ -214,7 +214,7 @@ export default function Dashboard() {
                 {error && (
                     <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl flex items-center gap-3">
                         <div className="p-2 bg-red-500/20 rounded-lg">
-                            <Zap className="w-5 h-5 text-red-400" />
+                            <FiZap className="w-5 h-5 text-red-400" />
                         </div>
                         <div>
                             <p className="font-semibold text-red-400">Connection Error</p>
@@ -393,7 +393,7 @@ function DashboardToggleMenu({
                 title="Toggle card visibility"
                 aria-label="View options"
             >
-                <MoreVertical className="w-5 h-5" />
+                <FiMoreVertical className="w-5 h-5" />
             </button>
 
             {isOpen && (
