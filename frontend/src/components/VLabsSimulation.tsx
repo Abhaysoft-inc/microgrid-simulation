@@ -1537,12 +1537,12 @@ export default function VLabsSimulation() {
                 <div className="max-w-7xl mx-auto px-4 py-4">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center border border-blue-100">
-                                <Zap className="w-6 h-6 text-blue-600" />
+                            <div className="w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden">
+                                <img src="/logo.png" alt="VLabs Logo" className="w-10 h-10 object-contain" />
                             </div>
                             <div>
                                 <h1 className="text-lg font-bold text-slate-900">Microgrid Digital Twin</h1>
-                                <p className="text-xs text-slate-500 font-medium">Virtual Labs Experiment </p>
+                                <p className="text-xs text-slate-500 font-medium">Simulation </p>
                             </div>
                         </div>
                     </div>
@@ -1834,8 +1834,8 @@ export default function VLabsSimulation() {
                                             <button
                                                 onClick={() => setVisualizationMode("2d")}
                                                 className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all ${visualizationMode === "2d"
-                                                        ? "bg-white text-slate-900 shadow-sm"
-                                                        : "text-slate-500 hover:text-slate-700"
+                                                    ? "bg-white text-slate-900 shadow-sm"
+                                                    : "text-slate-500 hover:text-slate-700"
                                                     }`}
                                                 title="2D Mode - Better for low-end devices"
                                             >
@@ -1845,8 +1845,8 @@ export default function VLabsSimulation() {
                                             <button
                                                 onClick={() => setVisualizationMode("3d")}
                                                 className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all ${visualizationMode === "3d"
-                                                        ? "bg-white text-slate-900 shadow-sm"
-                                                        : "text-slate-500 hover:text-slate-700"
+                                                    ? "bg-white text-slate-900 shadow-sm"
+                                                    : "text-slate-500 hover:text-slate-700"
                                                     }`}
                                                 title="3D Mode - Enhanced visualization"
                                             >
