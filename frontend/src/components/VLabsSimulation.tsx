@@ -296,10 +296,17 @@ export default function VLabsSimulation() {
             const data: HourlyData[] = [];
             let soc = initialSoC;
 
+            // Apply solar capacity factor (base profile assumes 5kW system)
+            const capacityFactor = solarCapacity / 5.0;
+            // Apply weather efficiency (sunny = 100%, cloudy = 50%)
+            const weatherEfficiency = weatherMode === "sunny" ? 1.0 : 0.5;
+
             for (let hour = 0; hour < 24; hour++) {
-                const solar = hour >= 6 && hour <= 18
+                const baseSolar = hour >= 6 && hour <= 18
                     ? 7 * Math.exp(-0.5 * Math.pow((hour - 12) / 3, 2))
                     : 0;
+                // Apply capacity and weather factors to solar generation
+                const solar = baseSolar * capacityFactor * weatherEfficiency;
                 const load = [1.5, 1.5, 1.5, 1.5, 2.0, 2.5, 3.5, 4.0, 4.5, 3.5, 3.0, 2.5, 2.5, 2.5, 3.0, 3.5, 4.0, 5.0, 6.5, 7.0, 6.5, 5.5, 4.0, 2.5][hour];
                 const isPeak = hour >= 14 && hour < 22;
                 const price = isPeak ? peakPrice : offPeakPrice;
@@ -366,7 +373,7 @@ export default function VLabsSimulation() {
 
         setCurrentHour(0);
         setIsPlaying(true);
-    }, [batteryCapacity, initialSoC, peakPrice, offPeakPrice]);
+    }, [batteryCapacity, solarCapacity, weatherMode, initialSoC, peakPrice, offPeakPrice]);
 
     // Run simulation
     const runSimulation = useCallback(async () => {
