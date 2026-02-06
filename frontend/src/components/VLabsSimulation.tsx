@@ -14,7 +14,7 @@
 
 import React, { useState, useCallback, useEffect } from "react";
 import Joyride, { CallBackProps, STATUS, Step } from 'react-joyride';
-import { Play, Pause, RotateCcw, ChevronLeft, ChevronRight, Sun, Battery, Home, Zap, Settings, BarChart3, BookOpen, FlaskConical, CheckSquare, FileText, CheckCircle2, XCircle, LayoutList, Lightbulb, HelpCircle, X, Award, Leaf, TrendingUp, Target, AlertTriangle, CloudRain, BatteryWarning, MessageSquare, MoreVertical } from "lucide-react";
+import { Play, Pause, RotateCcw, ChevronLeft, ChevronRight, Sun, Battery, Home, Zap, Settings, BarChart3, BookOpen, FlaskConical, CheckSquare, FileText, CheckCircle2, XCircle, LayoutList, Lightbulb, HelpCircle, X, Award, Leaf, TrendingUp, Target, AlertTriangle, CloudRain, BatteryWarning, MessageSquare, MoreVertical, Maximize } from "lucide-react";
 import Microgrid3DScene from "./Microgrid3DScene";
 import EnergyFlowD3 from "./EnergyFlowD3";
 import FeedbackTab from "./FeedbackTab";
@@ -122,6 +122,7 @@ export default function VLabsSimulation() {
 
     // Collapsible panels state
     const [isEnergyFlowExpanded, setIsEnergyFlowExpanded] = useState(false);
+    const [isEnergyFlowMaximized, setIsEnergyFlowMaximized] = useState(false);
     const [isBillExpanded, setIsBillExpanded] = useState(false);
     const [isBatteryExpanded, setIsBatteryExpanded] = useState(false);
     const [isCostEfficiencyExpanded, setIsCostEfficiencyExpanded] = useState(false);
@@ -946,16 +947,27 @@ export default function VLabsSimulation() {
                         <div className="lg:col-span-3 space-y-4">
                             {/* Energy Flow Graph - Collapsible */}
                             <div id="tour-procedure-step" className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-                                <button
-                                    onClick={() => setIsEnergyFlowExpanded(!isEnergyFlowExpanded)}
-                                    className="w-full p-3 flex items-center justify-between bg-slate-50 border-b border-slate-200 hover:bg-slate-100 transition-colors"
-                                >
-                                    <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                                        <BarChart3 className="w-4 h-4 text-blue-600" />
-                                        24-Hour Energy Flow
-                                    </h3>
-                                    <ChevronRight className={`w-4 h-4 text-slate-600 transition-transform ${isEnergyFlowExpanded ? 'rotate-90' : ''}`} />
-                                </button>
+                                <div className="flex items-center justify-between bg-slate-50 border-b border-slate-200">
+                                    <button
+                                        onClick={() => setIsEnergyFlowExpanded(!isEnergyFlowExpanded)}
+                                        className="flex-1 p-3 flex items-center justify-between hover:bg-slate-100 transition-colors text-left"
+                                    >
+                                        <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                                            <BarChart3 className="w-4 h-4 text-blue-600" />
+                                            24-Hour Energy Flow
+                                        </h3>
+                                        <ChevronRight className={`w-4 h-4 text-slate-600 transition-transform ${isEnergyFlowExpanded ? 'rotate-90' : ''}`} />
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setIsEnergyFlowMaximized(true);
+                                        }}
+                                        className="p-3 hover:bg-blue-100 text-slate-500 hover:text-blue-600 transition-colors border-l border-slate-200"
+                                        title="Maximize Chart"
+                                    >
+                                        <Maximize className="w-4 h-4" />
+                                    </button>
+                                </div>
                                 {isEnergyFlowExpanded && (
                                     <div className="p-3 bg-white">
                                         <EnergyFlowD3
@@ -1484,7 +1496,14 @@ export default function VLabsSimulation() {
                 )}
 
                 {activeTab === "references" && (
-                    <ReferencesContent />
+                    <ReferencesContent
+                        isEnergyFlowMaximized={isEnergyFlowMaximized}
+                        setIsEnergyFlowMaximized={setIsEnergyFlowMaximized}
+                        result={result}
+                        activeData={activeData}
+                        currentHour={currentHour}
+                        activeStrategy={activeStrategy}
+                    />
                 )}
 
                 {activeTab === "feedback" && (
@@ -1498,6 +1517,32 @@ export default function VLabsSimulation() {
                     <p>Microgrid Digital Twin • Virtual Labs Hackathon 2026</p>
                     <p className="text-xs mt-1 text-gray-500">Powered by Next.js + Three.js + D3.js + p5.js</p>
                 </div>
+                {/* Energy Flow Maximize Modal */}
+                {isEnergyFlowMaximized && (
+                    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+                        <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[90vh]">
+                            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                    <BarChart3 className="w-5 h-5 text-blue-600" />
+                                    24-Hour Energy Flow Analysis
+                                </h3>
+                                <button
+                                    onClick={() => setIsEnergyFlowMaximized(false)}
+                                    className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-500"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <div className="p-0 flex-1 overflow-auto bg-white min-h-[400px]">
+                                <EnergyFlowD3
+                                    data={result ? result.smart_data : activeData}
+                                    currentHour={currentHour}
+                                    strategy={activeStrategy}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )}
             </footer>
         </div>
     );
@@ -2129,7 +2174,21 @@ function QuizContent() {
     );
 }
 
-function ReferencesContent() {
+function ReferencesContent({
+    isEnergyFlowMaximized,
+    setIsEnergyFlowMaximized,
+    result,
+    activeData,
+    currentHour,
+    activeStrategy
+}: {
+    isEnergyFlowMaximized: boolean;
+    setIsEnergyFlowMaximized: (v: boolean) => void;
+    result: SimulationResult | null;
+    activeData: HourlyData[];
+    currentHour: number;
+    activeStrategy: "baseline" | "smart";
+}) {
     const references = [
         {
             category: "Standards",
