@@ -12,7 +12,8 @@
  * - p5.js animated components
  */
 
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useMemo, lazy, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Joyride, { CallBackProps, STATUS, Step } from 'react-joyride';
 import { Play, Pause, RotateCcw, ChevronLeft, ChevronRight, Sun, Battery, Home, Zap, Settings, BarChart3, BookOpen, FlaskConical, CheckSquare, FileText, CheckCircle2, XCircle, LayoutList, Lightbulb, HelpCircle, X, Award, Leaf, TrendingUp, Target, AlertTriangle, CloudRain, BatteryWarning, MessageSquare, MoreVertical, Maximize, Download, Monitor, Smartphone } from "lucide-react";
 import Microgrid3DScene from "./Microgrid3DScene";
@@ -21,6 +22,10 @@ import EnergyFlowD3 from "./EnergyFlowD3";
 import FeedbackTab from "./FeedbackTab";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import type { PlacedNode, Wire } from "@/lib/microgridElements";
+
+const DesignerLive3DScene = lazy(() => import("./designer/DesignerLive3DScene"));
+const DesignerLive2DScene = lazy(() => import("./designer/DesignerLive2DScene"));
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://microgrid-simulation.onrender.com";
 
@@ -119,19 +124,35 @@ interface ChatMessage {
 }
 
 export default function VLabsSimulation() {
+    const searchParams = useSearchParams();
+    const router = useRouter();
+    const fromDesigner = searchParams.get("from_designer") === "true";
+
     // Tab state
-    const [activeTab, setActiveTab] = useState<"theory" | "procedure" | "simulation" | "analysis" | "quiz" | "references" | "feedback">("theory");
+    const [activeTab, setActiveTab] = useState<"theory" | "procedure" | "simulation" | "analysis" | "quiz" | "references" | "feedback">(fromDesigner ? "simulation" : "theory");
 
     // Procedure step state
     const [currentStep, setCurrentStep] = useState(0);
     const [completedSteps, setCompletedSteps] = useState<number[]>([]);
 
-    // Simulation parameters
-    const [batteryCapacity, setBatteryCapacity] = useState(10);
-    const [initialSoC, setInitialSoC] = useState(50);
-    const [solarCapacity, setSolarCapacity] = useState(5);
+    // Simulation parameters – read designer URL params if present
+    const [batteryCapacity, setBatteryCapacity] = useState(() => {
+        const v = searchParams.get("battery_capacity_kwh");
+        return v ? parseFloat(v) : 10;
+    });
+    const [initialSoC, setInitialSoC] = useState(() => {
+        const v = searchParams.get("initial_soc");
+        return v ? Math.round(parseFloat(v) * 100) : 50;
+    });
+    const [solarCapacity, setSolarCapacity] = useState(() => {
+        const v = searchParams.get("solar_capacity_kw");
+        return v ? parseFloat(v) : 5;
+    });
     const [weatherMode, setWeatherMode] = useState<"sunny" | "cloudy">("sunny");
-    const [peakLoadDemand, setPeakLoadDemand] = useState(7); // Peak load demand in kW (default 7kW for Delhi residential)
+    const [peakLoadDemand, setPeakLoadDemand] = useState(() => {
+        const v = searchParams.get("peak_load_demand");
+        return v ? parseFloat(v) : 7;
+    }); // Peak load demand in kW (default 7kW for Delhi residential)
     // 3-tier Time-of-Day (ToD) pricing
     const [offPeakPrice, setOffPeakPrice] = useState(4);
     const [standardPrice, setStandardPrice] = useState(6.5);
@@ -181,6 +202,22 @@ export default function VLabsSimulation() {
     const [challengeDifficulty, setChallengeDifficulty] = useState<"easy" | "medium" | "hard">("medium");
     const [activeChallenge, setActiveChallenge] = useState<{ id: number; difficulty: string } | null>(null);
 
+    // ─── Designer grid data (loaded from localStorage) ────
+    const [designerNodes, setDesignerNodes] = useState<PlacedNode[]>([]);
+    const [designerWires, setDesignerWires] = useState<Wire[]>([]);
+
+    useEffect(() => {
+        if (!fromDesigner) return;
+        try {
+            const raw = localStorage.getItem("microgrid_design");
+            if (raw) {
+                const { nodes, wires } = JSON.parse(raw);
+                if (Array.isArray(nodes)) setDesignerNodes(nodes);
+                if (Array.isArray(wires)) setDesignerWires(wires);
+            }
+        } catch { /* ignore parse errors */ }
+    }, [fromDesigner]);
+
     // Challenge definitions
     const challenges = [
         {
@@ -205,7 +242,7 @@ export default function VLabsSimulation() {
             id: 2,
             title: "Monsoon Cloudy Day",
             icon: CloudRain,
-            iconColor: "text-blue-500",
+            iconColor: "text-sage-500",
             description: "Heavy monsoon clouds have reduced solar generation by 60%. You must manage your energy consumption carefully and rely more on stored battery power and grid during off-peak hours.",
             objective: "Minimize costs with severely reduced solar output",
             difficulty: {
@@ -603,7 +640,7 @@ export default function VLabsSimulation() {
             if (latest.battery_empty_during_peak) {
                 setAiHint({
                     should_show_hint: true,
-                    hint_title: "💡 Battery Strategy Tip",
+                    hint_title: "Battery Strategy Tip",
                     hint_message: "I noticed your battery is empty during peak hours. Try charging it at 3 AM when the price is lower!",
                     suggestion_type: "battery",
                     confidence: 0.8,
@@ -817,7 +854,12 @@ export default function VLabsSimulation() {
 
     // Get current data for visualization
     const currentData = result
-        ? (activeStrategy === "smart" ? result.smart_data : result.baseline_data)[currentHour]
+        ? (() => {
+            const d = (activeStrategy === "smart" ? result.smart_data : result.baseline_data)[currentHour];
+            return {
+                ...d,
+            };
+        })()
         : {
             hour: currentHour,
             solar_generation: 0,
@@ -856,7 +898,7 @@ export default function VLabsSimulation() {
         let grade: string;
         let gradeColor: string;
         if (avgScore >= 40) { grade = 'A'; gradeColor = 'text-green-500'; }
-        else if (avgScore >= 30) { grade = 'B'; gradeColor = 'text-blue-500'; }
+        else if (avgScore >= 30) { grade = 'B'; gradeColor = 'text-sage-500'; }
         else if (avgScore >= 20) { grade = 'C'; gradeColor = 'text-yellow-500'; }
         else if (avgScore >= 10) { grade = 'D'; gradeColor = 'text-orange-500'; }
         else { grade = 'F'; gradeColor = 'text-red-500'; }
@@ -1102,10 +1144,10 @@ export default function VLabsSimulation() {
     // Get hint icon based on suggestion type
     const getHintIcon = (type: string) => {
         switch (type) {
-            case "battery": return "🔋";
-            case "solar": return "☀️";
-            case "pricing": return "💰";
-            default: return "💡";
+            case "battery": return "";
+            case "solar": return "";
+            case "pricing": return "";
+            default: return "";
         }
     };
 
@@ -1370,7 +1412,7 @@ export default function VLabsSimulation() {
                         {/* Header */}
                         <div className="flex items-center justify-between p-4 border-b border-slate-100">
                             <div className="flex items-center gap-2">
-                                <Target className="w-5 h-5 text-blue-600" />
+                                <Target className="w-5 h-5 text-sage-600" />
                                 <h2 className="font-bold text-slate-900">Select Challenge</h2>
                             </div>
                             <button
@@ -1388,17 +1430,17 @@ export default function VLabsSimulation() {
                                     <button
                                         key={challenge.id}
                                         onClick={() => setSelectedChallenge(challenge.id)}
-                                        className="w-full p-4 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-all text-left group"
+                                        className="w-full p-4 rounded-xl border border-slate-200 hover:border-sage-300 hover:bg-sage-50/50 transition-all text-left group"
                                     >
                                         <div className="flex items-start gap-3">
                                             <div className={`p-2 rounded-lg bg-slate-100 group-hover:bg-white ${challenge.iconColor}`}>
                                                 <challenge.icon className="w-5 h-5" />
                                             </div>
                                             <div className="flex-1">
-                                                <h3 className="font-semibold text-slate-900 group-hover:text-blue-700">{challenge.title}</h3>
+                                                <h3 className="font-semibold text-slate-900 group-hover:text-sage-700">{challenge.title}</h3>
                                                 <p className="text-xs text-slate-500 mt-1 line-clamp-2">{challenge.description}</p>
                                             </div>
-                                            <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500" />
+                                            <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-sage-500" />
                                         </div>
                                     </button>
                                 ))}
@@ -1412,7 +1454,7 @@ export default function VLabsSimulation() {
                                             {/* Back button */}
                                             <button
                                                 onClick={() => setSelectedChallenge(null)}
-                                                className="text-sm text-slate-500 hover:text-blue-600 flex items-center gap-1"
+                                                className="text-sm text-slate-500 hover:text-sage-600 flex items-center gap-1"
                                             >
                                                 <ChevronLeft className="w-4 h-4" /> Back to challenges
                                             </button>
@@ -1433,7 +1475,7 @@ export default function VLabsSimulation() {
                                             {/* Objective */}
                                             <div className="bg-slate-50 rounded-lg p-3 border border-slate-100">
                                                 <div className="flex items-center gap-2 text-sm">
-                                                    <Target className="w-4 h-4 text-blue-600" />
+                                                    <Target className="w-4 h-4 text-sage-600" />
                                                     <span className="font-semibold text-slate-700">Objective</span>
                                                 </div>
                                                 <p className="text-sm text-slate-600 mt-1 ml-6">{challenge.objective}</p>
@@ -1450,7 +1492,7 @@ export default function VLabsSimulation() {
                                                             key={diff}
                                                             onClick={() => setChallengeDifficulty(diff)}
                                                             className={`py-2 px-4 rounded-lg text-sm font-medium capitalize transition-all border ${challengeDifficulty === diff
-                                                                ? "bg-blue-600 text-white border-blue-600"
+                                                                ? "bg-sage-600 text-white border-sage-600"
                                                                 : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
                                                                 }`}
                                                         >
@@ -1458,7 +1500,7 @@ export default function VLabsSimulation() {
                                                         </button>
                                                     ))}
                                                 </div>
-                                                <p className="text-xs text-blue-600 mt-2">
+                                                <p className="text-xs text-sage-600 mt-2">
                                                     {challenge.hints[challengeDifficulty]}
                                                 </p>
                                             </div>
@@ -1466,7 +1508,7 @@ export default function VLabsSimulation() {
                                             {/* Start Button */}
                                             <button
                                                 onClick={startChallenge}
-                                                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition-colors"
+                                                className="w-full py-3 bg-sage-600 hover:bg-sage-700 text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition-colors"
                                             >
                                                 <Play className="w-4 h-4 fill-current" />
                                                 Start Mission
@@ -1487,7 +1529,7 @@ export default function VLabsSimulation() {
                         {/* Header */}
                         <div className="flex items-center justify-between p-3 border-b border-slate-100">
                             <div className="flex items-center gap-2">
-                                <Award className="w-4 h-4 text-blue-600" />
+                                <Award className="w-4 h-4 text-sage-600" />
                                 <h2 className="font-bold text-slate-900 text-sm">Simulation Complete - Report Card</h2>
                             </div>
                             <button
@@ -1522,8 +1564,8 @@ export default function VLabsSimulation() {
                                     </div>
                                     <div className="text-lg font-bold text-slate-900">{reportData.totalSolar.toFixed(1)} kWh</div>
                                 </div>
-                                <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-100">
-                                    <div className="flex items-center gap-1 text-indigo-600 text-[10px] font-medium mb-0.5">
+                                <div className="bg-sage-50 rounded-lg p-3 border border-sage-100">
+                                    <div className="flex items-center gap-1 text-sage-600 text-[10px] font-medium mb-0.5">
                                         <Home className="w-3 h-3" /> GRID USED
                                     </div>
                                     <div className="text-lg font-bold text-slate-900">{reportData.totalGrid.toFixed(1)} kWh</div>
@@ -1568,7 +1610,7 @@ export default function VLabsSimulation() {
                                     setCurrentHour(6);
                                     setIsPlaying(true);
                                 }}
-                                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg flex items-center justify-center gap-2 transition-colors text-sm"
+                                className="w-full py-2.5 bg-sage-600 hover:bg-sage-700 text-white font-medium rounded-lg flex items-center justify-center gap-2 transition-colors text-sm"
                             >
                                 <RotateCcw className="w-4 h-4" />
                                 Try Again
@@ -1587,7 +1629,7 @@ export default function VLabsSimulation() {
                 callback={handleJoyrideCallback}
                 styles={{
                     options: {
-                        primaryColor: '#2563eb', // blue-600
+                        primaryColor: '#6b8e5a', // sage-600
                         zIndex: 1000,
                     },
                     tooltipContainer: {
@@ -1608,834 +1650,859 @@ export default function VLabsSimulation() {
                                 <p className="text-xs text-slate-500 font-medium">Simulation </p>
                             </div>
                         </div>
+                        <button
+                            onClick={() => router.push("/microgrid-designer")}
+                            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-sage-600 to-sage-600 hover:from-sage-500 hover:to-sage-500 text-white text-sm font-semibold rounded-lg transition shadow-md shadow-sage-600/20"
+                        >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                                <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                                <line x1="12" y1="22.08" x2="12" y2="12" />
+                            </svg>
+                            Design Your Grid
+                        </button>
+                        {activeTab === "simulation" && (
+                            <div className="flex items-center pl-4 border-l border-slate-200 ml-4 py-1">
+                                <VLabsToggleMenu
+                                    isEnergyFlowExpanded={isEnergyFlowExpanded}
+                                    setIsEnergyFlowExpanded={setIsEnergyFlowExpanded}
+                                    isBillExpanded={isBillExpanded}
+                                    setIsBillExpanded={setIsBillExpanded}
+                                    isBatteryExpanded={isBatteryExpanded}
+                                    setIsBatteryExpanded={setIsBatteryExpanded}
+                                />
+                            </div>
+                        )}
                     </div>
                 </div>
             </header>
 
-            {/* Tab Navigation */}
-            <nav className="bg-white border-b border-gray-200">
-                <div className="max-w-7xl mx-auto px-4 flex items-center justify-between">
-                    <div className="flex gap-1 overflow-x-auto">
-                        {[
-                            { id: "theory", label: "Theory", icon: BookOpen },
-                            { id: "procedure", label: "Procedure", icon: Settings },
-                            { id: "simulation", label: "Simulation", icon: FlaskConical },
-                            { id: "analysis", label: "Analysis", icon: BarChart3 },
-                            { id: "quiz", label: "Quiz", icon: CheckSquare },
-                            { id: "references", label: "References", icon: FileText },
-                            { id: "feedback", label: "Feedback", icon: MessageSquare },
-                        ].map((tab) => (
-                            <button
-                                key={tab.id}
-                                onClick={() => setActiveTab(tab.id as "theory" | "procedure" | "simulation" | "analysis" | "quiz" | "references" | "feedback")}
-                                className={`flex items-center gap-2 px-6 py-3 text-sm font-medium transition-all whitespace-nowrap ${activeTab === tab.id
-                                    ? "bg-blue-50 text-blue-700 border-b-2 border-blue-600"
-                                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                                    }`}
-                            >
-                                <tab.icon className="w-4 h-4" />
-                                {tab.label}
-                            </button>
-                        ))}
-                    </div>
+            {/* Main Content with Left Sidebar */}
+            <div className="flex">
+                {/* Left Vertical Tab Navigation */}
+                <nav className="w-20 bg-white border-r border-gray-200 flex flex-col items-center py-4 gap-2 sticky top-0 h-screen overflow-y-auto">
+                    {[
+                        { id: "theory", label: "Theory", icon: BookOpen },
+                        { id: "procedure", label: "Procedure", icon: Settings },
+                        { id: "simulation", label: "Simulation", icon: FlaskConical },
+                        { id: "analysis", label: "Analysis", icon: BarChart3 },
+                        { id: "quiz", label: "Quiz", icon: CheckSquare },
+                        { id: "references", label: "References", icon: FileText },
+                        { id: "feedback", label: "Feedback", icon: MessageSquare },
+                    ].map((tab) => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id as "theory" | "procedure" | "simulation" | "analysis" | "quiz" | "references" | "feedback")}
+                            className={`flex flex-col items-center justify-center gap-1 w-16 h-16 rounded-lg text-xs font-medium transition-all ${activeTab === tab.id
+                                ? "bg-sage-50 text-sage-700 border-2 border-sage-600"
+                                : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                                }`}
+                            title={tab.label}
+                        >
+                            <tab.icon className="w-5 h-5" />
+                            <span className="text-[10px] leading-tight text-center px-1">{tab.label}</span>
+                        </button>
+                    ))}
+                </nav>
+
+                {/* Main Content Area */}
+                <main className="flex-1 max-w-7xl mx-auto px-4 py-6">
+                    {activeTab === "theory" && (
+                        <TheoryContent />
+                    )}
+
+                    {activeTab === "procedure" && (
+                        <ProcedureContent
+                            currentStep={currentStep}
+                            completedSteps={completedSteps}
+                            onStepChange={setCurrentStep}
+                            onGoToSimulation={() => setActiveTab("simulation")}
+                        />
+                    )}
 
                     {activeTab === "simulation" && (
-                        <div className="flex items-center pl-4 border-l border-slate-200 ml-4 py-1">
-                            <VLabsToggleMenu
-                                isEnergyFlowExpanded={isEnergyFlowExpanded}
-                                setIsEnergyFlowExpanded={setIsEnergyFlowExpanded}
-                                isBillExpanded={isBillExpanded}
-                                setIsBillExpanded={setIsBillExpanded}
-                                isBatteryExpanded={isBatteryExpanded}
-                                setIsBatteryExpanded={setIsBatteryExpanded}
-                            />
-                        </div>
-                    )}
-                </div>
-            </nav>
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-
-            {/* Main Content */}
-            <main className="max-w-7xl mx-auto px-4 py-6">
-                {activeTab === "theory" && (
-                    <TheoryContent />
-                )}
-
-                {activeTab === "procedure" && (
-                    <ProcedureContent
-                        currentStep={currentStep}
-                        completedSteps={completedSteps}
-                        onStepChange={setCurrentStep}
-                        onGoToSimulation={() => setActiveTab("simulation")}
-                    />
-                )}
-
-                {activeTab === "simulation" && (
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-                        {/* Left Panel - Energy Flow Graph */}
-                        <div className="lg:col-span-3 space-y-4">
-                            {/* Energy Flow Graph - Collapsible */}
-                            <div id="tour-procedure-step" className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-                                <div className="flex items-center justify-between bg-slate-50 border-b border-slate-200">
-                                    <button
-                                        onClick={() => setIsEnergyFlowExpanded(!isEnergyFlowExpanded)}
-                                        className="flex-1 p-3 flex items-center justify-between hover:bg-slate-100 transition-colors text-left"
-                                    >
-                                        <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                                            <BarChart3 className="w-4 h-4 text-blue-600" />
-                                            24-Hour Energy Flow
-                                        </h3>
-                                        <ChevronRight className={`w-4 h-4 text-slate-600 transition-transform ${isEnergyFlowExpanded ? 'rotate-90' : ''}`} />
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            setIsEnergyFlowMaximized(true);
-                                        }}
-                                        className="p-3 hover:bg-blue-100 text-slate-500 hover:text-blue-600 transition-colors border-l border-slate-200"
-                                        title="Maximize Chart"
-                                    >
-                                        <Maximize className="w-4 h-4" />
-                                    </button>
-                                </div>
-                                {isEnergyFlowExpanded && (
-                                    <div className="p-3 bg-white">
-                                        <EnergyFlowD3
-                                            data={activeData}
-                                            currentHour={currentHour}
-                                            strategy={activeStrategy}
-                                        />
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Strategy Toggle */}
-                            {result && (
-                                <div id="tour-strategy-toggle" className="bg-white rounded-lg border border-slate-200 p-4">
-                                    <h3 className="text-sm font-semibold text-slate-900 mb-3">Active Strategy</h3>
-                                    <div className="grid grid-cols-2 gap-2">
+                            {/* Left Panel - Energy Flow Graph */}
+                            <div className="lg:col-span-3 space-y-4">
+                                {/* Energy Flow Graph - Collapsible */}
+                                <div id="tour-procedure-step" className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+                                    <div className="flex items-center justify-between bg-slate-50 border-b border-slate-200">
                                         <button
-                                            onClick={() => setActiveStrategy("baseline")}
-                                            className={`py-2 px-3 rounded-md text-xs font-medium transition-all border ${activeStrategy === "baseline"
-                                                ? "bg-slate-800 text-white border-slate-800"
-                                                : "bg-white text-slate-600 hover:bg-slate-50 border-slate-200"
-                                                }`}
+                                            onClick={() => setIsEnergyFlowExpanded(!isEnergyFlowExpanded)}
+                                            className="flex-1 p-3 flex items-center justify-between hover:bg-slate-100 transition-colors text-left"
                                         >
-                                            Baseline
+                                            <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                                                <BarChart3 className="w-4 h-4 text-sage-600" />
+                                                24-Hour Energy Flow
+                                            </h3>
+                                            <ChevronRight className={`w-4 h-4 text-slate-600 transition-transform ${isEnergyFlowExpanded ? 'rotate-90' : ''}`} />
                                         </button>
                                         <button
-                                            onClick={() => setActiveStrategy("smart")}
-                                            className={`py-2 px-3 rounded-md text-xs font-medium transition-all border ${activeStrategy === "smart"
-                                                ? "bg-blue-600 text-white border-blue-600"
-                                                : "bg-white text-slate-600 hover:bg-slate-50 border-slate-200"
-                                                }`}
+                                            onClick={() => {
+                                                setIsEnergyFlowMaximized(true);
+                                            }}
+                                            className="p-3 hover:bg-sage-100 text-slate-500 hover:text-sage-600 transition-colors border-l border-slate-200"
+                                            title="Maximize Chart"
                                         >
-                                            Smart (Optimized)
+                                            <Maximize className="w-4 h-4" />
                                         </button>
                                     </div>
+                                    {isEnergyFlowExpanded && (
+                                        <div className="p-3 bg-white">
+                                            <EnergyFlowD3
+                                                data={activeData}
+                                                currentHour={currentHour}
+                                                strategy={activeStrategy}
+                                            />
+                                        </div>
+                                    )}
                                 </div>
-                            )}
 
-                            {/* Electricity Bill Card - Collapsible */}
-                            <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-                                <button
-                                    onClick={() => setIsBillExpanded(!isBillExpanded)}
-                                    className="w-full p-3 flex items-center justify-between bg-red-50 border-b border-red-100 hover:bg-red-100 transition-colors"
-                                >
-                                    <h3 className="text-xs font-semibold text-red-800 uppercase tracking-wider flex items-center gap-2">
-                                        <Zap className="w-3 h-3" />
-                                        Electricity Bill
-                                    </h3>
-                                    <ChevronRight className={`w-4 h-4 text-red-600 transition-transform ${isBillExpanded ? 'rotate-90' : ''}`} />
-                                </button>
-                                {isBillExpanded && (
-                                    <div className="p-4 bg-red-50">
-                                        <div className="text-center py-3">
-                                            <div className="text-2xl font-bold text-red-600">
-                                                ₹{activeData.slice(0, currentHour + 1).reduce((sum, h) => sum + h.hourly_cost, 0).toFixed(2)}
-                                            </div>
-                                            <div className="text-xs text-red-400 mt-1">Real-time Bill</div>
-                                        </div>
-                                        <div className="flex justify-between items-center pt-3 border-t border-red-100 text-xs">
-                                            <div>
-                                                <div className="text-red-400 font-medium">Current Tariff</div>
-                                                <div className="text-red-700 font-bold">₹{getPriceForHour(currentHour).toFixed(2)}/kWh</div>
-                                            </div>
-                                            <div className="text-right">
-                                                <div className="text-red-400 font-medium">Grid Power</div>
-                                                <div className="text-red-700 font-bold">{currentData.grid_usage.toFixed(2)} kW</div>
-                                            </div>
+                                {/* Strategy Toggle */}
+                                {result && (
+                                    <div id="tour-strategy-toggle" className="bg-white rounded-lg border border-slate-200 p-4">
+                                        <h3 className="text-sm font-semibold text-slate-900 mb-3">Active Strategy</h3>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button
+                                                onClick={() => setActiveStrategy("baseline")}
+                                                className={`py-2 px-3 rounded-md text-xs font-medium transition-all border ${activeStrategy === "baseline"
+                                                    ? "bg-slate-800 text-white border-slate-800"
+                                                    : "bg-white text-slate-600 hover:bg-slate-50 border-slate-200"
+                                                    }`}
+                                            >
+                                                Baseline
+                                            </button>
+                                            <button
+                                                onClick={() => setActiveStrategy("smart")}
+                                                className={`py-2 px-3 rounded-md text-xs font-medium transition-all border ${activeStrategy === "smart"
+                                                    ? "bg-sage-600 text-white border-sage-600"
+                                                    : "bg-white text-slate-600 hover:bg-slate-50 border-slate-200"
+                                                    }`}
+                                            >
+                                                Smart (Optimized)
+                                            </button>
                                         </div>
                                     </div>
                                 )}
-                            </div>
 
-                            {/* Battery Status Card - Collapsible */}
-                            <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-                                <button
-                                    onClick={() => setIsBatteryExpanded(!isBatteryExpanded)}
-                                    className="w-full p-3 flex items-center justify-between bg-slate-50 border-b border-slate-200 hover:bg-slate-100 transition-colors"
-                                >
-                                    <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                                        <Battery className="w-3 h-3" />
-                                        Battery Status
-                                    </h3>
-                                    <ChevronRight className={`w-4 h-4 text-slate-600 transition-transform ${isBatteryExpanded ? 'rotate-90' : ''}`} />
-                                </button>
-                                {isBatteryExpanded && (
-                                    <div className="p-4">
-                                        <div className="flex justify-center mb-4">
-                                            {currentData.battery_charge > 0 ? (
-                                                <span className="text-xs font-bold text-emerald-600 animate-pulse flex items-center gap-1">
-                                                    ↓ Charging
-                                                </span>
-                                            ) : currentData.battery_discharge > 0 ? (
-                                                <span className="text-xs font-bold text-amber-600 animate-pulse flex items-center gap-1">
-                                                    ↑ Discharging
-                                                </span>
-                                            ) : (
-                                                <span className="text-xs font-bold text-slate-400">Idle</span>
-                                            )}
-                                        </div>
-
-                                        <div className="flex flex-col items-center justify-center">
-                                            {/* Visual Battery */}
-                                            <div className="w-14 h-24 border-4 border-slate-300 rounded-lg relative mb-3 bg-slate-50">
-                                                <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-5 h-1.5 bg-slate-300 rounded-t-sm"></div>
-                                                <div className="absolute inset-1 rounded overflow-hidden">
-                                                    <div
-                                                        className={`w-full absolute bottom-0 left-0 right-0 transition-all duration-500 rounded-sm ${currentData.battery_soc > 20 ? "bg-emerald-400" : "bg-red-400"}`}
-                                                        style={{ height: `${Math.min(100, Math.max(0, currentData.battery_soc))}%` }}
-                                                    >
-                                                        {currentData.battery_charge > 0 && (
-                                                            <div className="absolute inset-0 bg-gradient-to-t from-transparent to-white/30 animate-pulse"></div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                {currentData.battery_soc < 20 && (
-                                                    <div className="absolute inset-0 flex items-center justify-center z-10">
-                                                        <span className="text-lg font-bold text-red-600 animate-bounce">!</span>
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            <div className="text-2xl font-bold text-slate-800 mb-1">
-                                                {currentData.battery_soc.toFixed(1)}%
-                                            </div>
-                                            <div className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-3">State of Charge</div>
-
-                                            <div className="w-full grid grid-cols-2 gap-3 pt-3 border-t border-slate-100">
-                                                <div className="text-center">
-                                                    <div className="text-xs text-slate-400 mb-1">Capacity</div>
-                                                    <div className="text-sm font-bold text-slate-700">{batteryCapacity} kWh</div>
-                                                </div>
-                                                <div className="text-center">
-                                                    <div className="text-xs text-slate-400 mb-1">Power Flow</div>
-                                                    <div className={`text-sm font-bold ${currentData.battery_charge > 0 ? "text-emerald-600" :
-                                                        currentData.battery_discharge > 0 ? "text-amber-600" : "text-slate-700"
-                                                        }`}>
-                                                        {(currentData.battery_charge || currentData.battery_discharge).toFixed(2)} kW
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Cost Efficiency Card - Collapsible */}
-                            {result && (
+                                {/* Electricity Bill Card - Collapsible */}
                                 <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
                                     <button
-                                        onClick={() => setIsCostEfficiencyExpanded(!isCostEfficiencyExpanded)}
+                                        onClick={() => setIsBillExpanded(!isBillExpanded)}
+                                        className="w-full p-3 flex items-center justify-between bg-red-50 border-b border-red-100 hover:bg-red-100 transition-colors"
+                                    >
+                                        <h3 className="text-xs font-semibold text-red-800 uppercase tracking-wider flex items-center gap-2">
+                                            <Zap className="w-3 h-3" />
+                                            Electricity Bill
+                                        </h3>
+                                        <ChevronRight className={`w-4 h-4 text-red-600 transition-transform ${isBillExpanded ? 'rotate-90' : ''}`} />
+                                    </button>
+                                    {isBillExpanded && (
+                                        <div className="p-4 bg-red-50">
+                                            <div className="text-center py-3">
+                                                <div className="text-2xl font-bold text-red-600">
+                                                    ₹{activeData.slice(0, currentHour + 1).reduce((sum, h) => sum + h.hourly_cost, 0).toFixed(2)}
+                                                </div>
+                                                <div className="text-xs text-red-400 mt-1">Real-time Bill</div>
+                                            </div>
+                                            <div className="flex justify-between items-center pt-3 border-t border-red-100 text-xs">
+                                                <div>
+                                                    <div className="text-red-400 font-medium">Current Tariff</div>
+                                                    <div className="text-red-700 font-bold">₹{getPriceForHour(currentHour).toFixed(2)}/kWh</div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-red-400 font-medium">Grid Power</div>
+                                                    <div className="text-red-700 font-bold">{currentData.grid_usage.toFixed(2)} kW</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Battery Status Card - Collapsible */}
+                                <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+                                    <button
+                                        onClick={() => setIsBatteryExpanded(!isBatteryExpanded)}
                                         className="w-full p-3 flex items-center justify-between bg-slate-50 border-b border-slate-200 hover:bg-slate-100 transition-colors"
                                     >
                                         <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                                            <BarChart3 className="w-3 h-3" />
-                                            Cost Efficiency
+                                            <Battery className="w-3 h-3" />
+                                            Battery Status
                                         </h3>
-                                        <ChevronRight className={`w-4 h-4 text-slate-600 transition-transform ${isCostEfficiencyExpanded ? 'rotate-90' : ''}`} />
+                                        <ChevronRight className={`w-4 h-4 text-slate-600 transition-transform ${isBatteryExpanded ? 'rotate-90' : ''}`} />
                                     </button>
-                                    {isCostEfficiencyExpanded && (
+                                    {isBatteryExpanded && (
                                         <div className="p-4">
-                                            <div className="space-y-3 text-sm">
-                                                <div className="flex justify-between items-center p-2 bg-slate-50 rounded border border-slate-100">
-                                                    <span className="text-slate-600 text-xs">Baseline Cost</span>
-                                                    <span className="text-slate-900 font-mono font-medium">₹{result.summary.baseline_total_cost.toFixed(2)}</span>
+                                            <div className="flex justify-center mb-4">
+                                                {currentData.battery_charge > 0 ? (
+                                                    <span className="text-xs font-bold text-emerald-600 animate-pulse flex items-center gap-1">
+                                                        ↓ Charging
+                                                    </span>
+                                                ) : currentData.battery_discharge > 0 ? (
+                                                    <span className="text-xs font-bold text-amber-600 animate-pulse flex items-center gap-1">
+                                                        ↑ Discharging
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-xs font-bold text-slate-400">Idle</span>
+                                                )}
+                                            </div>
+
+                                            <div className="flex flex-col items-center justify-center">
+                                                {/* Visual Battery */}
+                                                <div className="w-14 h-24 border-4 border-slate-300 rounded-lg relative mb-3 bg-slate-50">
+                                                    <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-5 h-1.5 bg-slate-300 rounded-t-sm"></div>
+                                                    <div className="absolute inset-1 rounded overflow-hidden">
+                                                        <div
+                                                            className={`w-full absolute bottom-0 left-0 right-0 transition-all duration-500 rounded-sm ${currentData.battery_soc > 20 ? "bg-emerald-400" : "bg-red-400"}`}
+                                                            style={{ height: `${Math.min(100, Math.max(0, currentData.battery_soc))}%` }}
+                                                        >
+                                                            {currentData.battery_charge > 0 && (
+                                                                <div className="absolute inset-0 bg-gradient-to-t from-transparent to-white/30 animate-pulse"></div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    {currentData.battery_soc < 20 && (
+                                                        <div className="absolute inset-0 flex items-center justify-center z-10">
+                                                            <span className="text-lg font-bold text-red-600 animate-bounce">!</span>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                                <div className="flex justify-between items-center p-2 bg-blue-50/50 rounded border border-blue-100">
-                                                    <span className="text-blue-800 text-xs">Smart Cost</span>
-                                                    <span className="text-blue-700 font-mono font-bold">₹{result.summary.smart_total_cost.toFixed(2)}</span>
+
+                                                <div className="text-2xl font-bold text-slate-800 mb-1">
+                                                    {currentData.battery_soc.toFixed(1)}%
                                                 </div>
-                                                <div className="flex justify-between items-end pt-1">
-                                                    <span className="text-slate-500 text-xs">Net Savings</span>
-                                                    <div className="text-right">
-                                                        <span className="text-emerald-600 font-bold text-lg">
-                                                            {result.summary.cost_saved_percent.toFixed(1)}%
-                                                        </span>
-                                                        <span className="text-slate-400 text-xs ml-1">saved</span>
+                                                <div className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-3">State of Charge</div>
+
+                                                <div className="w-full grid grid-cols-2 gap-3 pt-3 border-t border-slate-100">
+                                                    <div className="text-center">
+                                                        <div className="text-xs text-slate-400 mb-1">Capacity</div>
+                                                        <div className="text-sm font-bold text-slate-700">{batteryCapacity} kWh</div>
+                                                    </div>
+                                                    <div className="text-center">
+                                                        <div className="text-xs text-slate-400 mb-1">Power Flow</div>
+                                                        <div className={`text-sm font-bold ${currentData.battery_charge > 0 ? "text-emerald-600" :
+                                                            currentData.battery_discharge > 0 ? "text-amber-600" : "text-slate-700"
+                                                            }`}>
+                                                            {(currentData.battery_charge || currentData.battery_discharge).toFixed(2)} kW
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
                                     )}
                                 </div>
-                            )}
-                        </div>
 
-                        {/* Center - 3D Visualization */}
-                        <div className="lg:col-span-6 space-y-4">
-                            <div id="tour-live-view" className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-                                <div className="p-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-                                    <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                                        <Zap className="w-4 h-4 text-blue-600" />
-                                        Microgrid Live View
-                                    </h3>
-                                    <div className="flex items-center gap-1">
-                                        {/* 2D/3D Toggle */}
-                                        <div className="flex items-center bg-slate-200 rounded-lg p-0.5 mr-2">
-                                            <button
-                                                onClick={() => setVisualizationMode("2d")}
-                                                className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all ${visualizationMode === "2d"
-                                                    ? "bg-white text-slate-900 shadow-sm"
-                                                    : "text-slate-500 hover:text-slate-700"
-                                                    }`}
-                                                title="2D Mode - Better for low-end devices"
-                                            >
-                                                <Smartphone className="w-3 h-3" />
-                                                2D
-                                            </button>
-                                            <button
-                                                onClick={() => setVisualizationMode("3d")}
-                                                className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all ${visualizationMode === "3d"
-                                                    ? "bg-white text-slate-900 shadow-sm"
-                                                    : "text-slate-500 hover:text-slate-700"
-                                                    }`}
-                                                title="3D Mode - Enhanced visualization"
-                                            >
-                                                <Monitor className="w-3 h-3" />
-                                                3D
-                                            </button>
-                                        </div>
+                                {/* Cost Efficiency Card - Collapsible */}
+                                {result && (
+                                    <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
                                         <button
-                                            onClick={() => setIsPlaying(!isPlaying)}
-                                            className="p-1.5 hover:bg-slate-200 rounded text-slate-600 transition-colors"
-                                            title={isPlaying ? "Pause" : "Play"}
+                                            onClick={() => setIsCostEfficiencyExpanded(!isCostEfficiencyExpanded)}
+                                            className="w-full p-3 flex items-center justify-between bg-slate-50 border-b border-slate-200 hover:bg-slate-100 transition-colors"
                                         >
-                                            {isPlaying ? (
-                                                <Pause className="w-4 h-4 fill-current" />
-                                            ) : (
-                                                <Play className="w-4 h-4 fill-current" />
-                                            )}
+                                            <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                                                <BarChart3 className="w-3 h-3" />
+                                                Cost Efficiency
+                                            </h3>
+                                            <ChevronRight className={`w-4 h-4 text-slate-600 transition-transform ${isCostEfficiencyExpanded ? 'rotate-90' : ''}`} />
                                         </button>
-                                        <button
-                                            onClick={() => { setCurrentHour(0); setIsPlaying(false); }}
-                                            className="p-1.5 hover:bg-slate-200 rounded text-slate-600 transition-colors"
-                                            title="Reset"
-                                        >
-                                            <RotateCcw className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div className="relative overflow-hidden bg-black">
-                                    {visualizationMode === "3d" ? (
-                                        <Microgrid3DScene currentData={currentData} />
-                                    ) : (
-                                        <Microgrid2DScene currentData={currentData} />
-                                    )}
-                                </div>
-
-                                {/* Time Slider */}
-                                <div className="p-3 border-t border-slate-200 bg-white">
-                                    <div className="flex items-center gap-4">
-                                        <span className="text-sm font-mono font-medium text-slate-700 w-12 text-center bg-slate-100 rounded py-0.5">
-                                            {String(currentHour).padStart(2, "0")}:00
-                                        </span>
-                                        <input
-                                            type="range"
-                                            min="0"
-                                            max="23"
-                                            value={currentHour}
-                                            onChange={(e) => setCurrentHour(Number(e.target.value))}
-                                            className="flex-1 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                                        />
-                                        <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${getTariffSlot(currentHour) === "peak"
-                                            ? "bg-red-50 text-red-600 border-red-100"
-                                            : getTariffSlot(currentHour) === "offpeak"
-                                                ? "bg-emerald-50 text-emerald-600 border-emerald-100"
-                                                : "bg-slate-50 text-slate-600 border-slate-200"
-                                            }`}>
-                                            {getTariffSlot(currentHour) === "peak"
-                                                ? "Peak Price"
-                                                : getTariffSlot(currentHour) === "offpeak"
-                                                    ? "Off-Peak"
-                                                    : "Standard"}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                {/* Dynamic Power Source Info */}
-                                <div className="p-3 border-t border-slate-200 bg-gradient-to-r from-slate-50 to-white">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                                        <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Active Power Sources</span>
-                                    </div>
-                                    <div className="flex flex-wrap gap-2">
-                                        {/* Solar Source */}
-                                        {currentData.solar_generation > 0 && (
-                                            <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full">
-                                                <Sun className="w-3.5 h-3.5 text-amber-500" />
-                                                <span className="text-xs font-medium text-amber-700">
-                                                    Solar: {currentData.solar_generation.toFixed(1)} kW
-                                                </span>
-                                                {currentData.solar_generation >= currentData.load_demand && (
-                                                    <span className="text-[10px] bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded-full font-semibold">PRIMARY</span>
-                                                )}
-                                            </div>
-                                        )}
-
-                                        {/* Grid Source */}
-                                        {currentData.grid_usage > 0 && (
-                                            <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-full">
-                                                <Zap className="w-3.5 h-3.5 text-indigo-500" />
-                                                <span className="text-xs font-medium text-indigo-700">
-                                                    Grid: {currentData.grid_usage.toFixed(1)} kW
-                                                </span>
-                                                {currentData.grid_usage > currentData.solar_generation && currentData.battery_discharge === 0 && (
-                                                    <span className="text-[10px] bg-indigo-200 text-indigo-800 px-1.5 py-0.5 rounded-full font-semibold">PRIMARY</span>
-                                                )}
-                                            </div>
-                                        )}
-
-                                        {/* Battery Discharging */}
-                                        {currentData.battery_discharge > 0 && (
-                                            <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-full">
-                                                <Battery className="w-3.5 h-3.5 text-emerald-500" />
-                                                <span className="text-xs font-medium text-emerald-700">
-                                                    Battery: {currentData.battery_discharge.toFixed(1)} kW
-                                                </span>
-                                                <span className="text-[10px] bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded-full font-semibold">DISCHARGING</span>
-                                            </div>
-                                        )}
-
-                                        {/* Battery Charging */}
-                                        {currentData.battery_charge > 0 && (
-                                            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-full">
-                                                <Battery className="w-3.5 h-3.5 text-blue-500" />
-                                                <span className="text-xs font-medium text-blue-700">
-                                                    Charging: {currentData.battery_charge.toFixed(1)} kW
-                                                </span>
-                                                <span className="text-[10px] bg-blue-200 text-blue-800 px-1.5 py-0.5 rounded-full font-semibold">STORING</span>
-                                            </div>
-                                        )}
-
-                                        {/* Night time - no solar */}
-                                        {currentData.solar_generation === 0 && currentData.grid_usage === 0 && currentData.battery_discharge === 0 && (
-                                            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-full">
-                                                <span className="text-xs font-medium text-slate-500">No active power flow</span>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Power Flow Summary */}
-                                    <div className="mt-3 pt-3 border-t border-slate-100">
-                                        <p className="text-xs text-slate-600">
-                                            {currentData.solar_generation > 0 && currentData.solar_generation >= currentData.load_demand ? (
-                                                <span className="text-amber-600 font-medium">
-                                                    ☀️ Solar is fully powering the load ({currentData.load_demand.toFixed(1)} kW).
-                                                    {currentData.battery_charge > 0 && ` Excess ${currentData.battery_charge.toFixed(1)} kW is charging the battery.`}
-                                                </span>
-                                            ) : currentData.solar_generation > 0 && currentData.grid_usage > 0 ? (
-                                                <span className="text-indigo-600 font-medium">
-                                                    ⚡ Solar provides {currentData.solar_generation.toFixed(1)} kW, Grid supplements {currentData.grid_usage.toFixed(1)} kW to meet {currentData.load_demand.toFixed(1)} kW demand.
-                                                </span>
-                                            ) : currentData.battery_discharge > 0 ? (
-                                                <span className="text-emerald-600 font-medium">
-                                                    🔋 Battery discharging {currentData.battery_discharge.toFixed(1)} kW during peak hours to reduce grid dependency.
-                                                </span>
-                                            ) : currentData.grid_usage > 0 ? (
-                                                <span className="text-slate-600 font-medium">
-                                                    🌙 Night time: Grid is the primary power source ({currentData.grid_usage.toFixed(1)} kW).
-                                                </span>
-                                            ) : (
-                                                <span className="text-slate-500">Waiting for simulation data...</span>
-                                            )}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Current Stats Below Visualization */}
-                            <div className="bg-white rounded-lg border border-slate-200 p-4">
-                                <h3 className="text-sm font-semibold text-slate-900 mb-3">Current Statistics</h3>
-                                <div className="grid grid-cols-4 gap-3">
-                                    <StatCard
-                                        icon={<Sun className="w-4 h-4" />}
-                                        label="Solar"
-                                        value={`${currentData.solar_generation.toFixed(1)} kW`}
-                                        color="text-amber-500"
-                                        bgColor=""
-                                    />
-                                    <StatCard
-                                        icon={<Home className="w-4 h-4" />}
-                                        label="Load"
-                                        value={`${currentData.load_demand.toFixed(1)} kW`}
-                                        color="text-slate-600"
-                                        bgColor=""
-                                    />
-                                    <StatCard
-                                        icon={<Battery className="w-4 h-4" />}
-                                        label="Battery"
-                                        value={`${currentData.battery_soc.toFixed(0)}%`}
-                                        color={currentData.battery_soc > 20 ? "text-emerald-600" : "text-red-500"}
-                                        bgColor=""
-                                    />
-                                    <StatCard
-                                        icon={<Zap className="w-4 h-4" />}
-                                        label="Grid"
-                                        value={`${currentData.grid_usage.toFixed(1)} kW`}
-                                        color="text-indigo-600"
-                                        bgColor=""
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Right - Configuration & Results */}
-                        <div id="tour-stats-charts" className="lg:col-span-3 space-y-4">
-                            {/* Live Battery Status Strip */}
-                            <div className="bg-white rounded-lg border border-slate-200 p-3 flex items-center justify-between gap-3">
-                                <div className="flex items-center gap-2 min-w-max">
-                                    <div className={`w-2 h-2 rounded-full ${currentData.battery_charge > 0 ? "bg-emerald-500 animate-pulse" : currentData.battery_discharge > 0 ? "bg-amber-500 animate-pulse" : "bg-slate-300"}`} />
-                                    <span className="text-xs font-semibold text-slate-700">Battery</span>
-                                </div>
-                                <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                    <div
-                                        className={`h-full transition-all duration-500 ${currentData.battery_soc > 20 ? "bg-emerald-500" : "bg-red-500"}`}
-                                        style={{ width: `${Math.min(100, Math.max(0, currentData.battery_soc))}%` }}
-                                    />
-                                </div>
-                                <span className="text-xs font-mono font-bold text-slate-700 min-w-[3ch] text-right">{currentData.battery_soc.toFixed(0)}%</span>
-                            </div>
-
-                            {/* Configuration Panel */}
-                            <div id="tour-configuration" className="bg-white rounded-lg border border-slate-200 p-4">
-                                <h3 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
-                                    <Settings className="w-4 h-4 text-blue-600" />
-                                    System Configuration
-                                </h3>
-
-                                {/* Run Button */}
-                                <button
-                                    id="tour-run-button"
-                                    onClick={runSimulation}
-                                    disabled={isLoading}
-                                    className="w-full mb-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:bg-slate-300 rounded-lg font-medium text-sm text-white transition-all flex items-center justify-center gap-2"
-                                >
-                                    {isLoading ? (
-                                        <>Running...</>
-                                    ) : (
-                                        <>
-                                            <Play className="w-4 h-4 fill-current" />
-                                            Run Simulation
-                                        </>
-                                    )}
-                                </button>
-
-                                <div className="space-y-4">
-                                    {/* Solar Capacity */}
-                                    <div>
-                                        <label className="text-xs text-slate-600 flex justify-between font-medium">
-                                            <span className="flex items-center gap-1">
-                                                <Sun className="w-3 h-3 text-slate-500" />
-                                                Solar Capacity
-                                            </span>
-                                            <span className="text-slate-900">{solarCapacity} kW</span>
-                                        </label>
-                                        <input
-                                            type="range"
-                                            min="3"
-                                            max="7"
-                                            step="1"
-                                            value={solarCapacity}
-                                            onChange={(e) => setSolarCapacity(Number(e.target.value))}
-                                            className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer mt-2 accent-blue-600"
-                                        />
-                                        <div className="flex justify-between text-[10px] text-slate-400 mt-1">
-                                            <span>3kW</span>
-                                            <span>5kW</span>
-                                            <span>7kW</span>
-                                        </div>
-                                    </div>
-
-                                    {/* Max Load Demand */}
-                                    <div>
-                                        <label className="text-xs text-slate-600 flex justify-between font-medium">
-                                            <span className="flex items-center gap-1">
-                                                <Home className="w-3 h-3 text-slate-500" />
-                                                Max Load Demand
-                                            </span>
-                                        </label>
-                                        <div className="flex items-center gap-2 mt-2">
-                                            <input
-                                                type="number"
-                                                min="1"
-                                                max="20"
-                                                step="0.5"
-                                                value={peakLoadDemand}
-                                                onChange={(e) => setPeakLoadDemand(Math.max(1, Math.min(20, Number(e.target.value))))}
-                                                className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
-                                            />
-                                            <span className="text-xs text-slate-600 font-medium">kW</span>
-                                        </div>
-                                        <p className="text-[10px] text-slate-600 mt-1">Maximum power draw at busiest time (evening). Load varies throughout the day.</p>
-                                    </div>
-
-                                    {/* Weather Toggle */}
-                                    <div>
-                                        <label className="text-xs text-slate-600 mb-2 block font-medium">Weather Mode</label>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <button
-                                                onClick={() => setWeatherMode("sunny")}
-                                                className={`py-2 px-3 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-2 border ${weatherMode === "sunny"
-                                                    ? "bg-slate-800 text-white border-slate-800"
-                                                    : "bg-white text-slate-600 hover:bg-slate-50 border-slate-200"
-                                                    }`}
-                                            >
-                                                <Sun className="w-3 h-3" />
-                                                Sunny
-                                            </button>
-                                            <button
-                                                onClick={() => setWeatherMode("cloudy")}
-                                                className={`py-2 px-3 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-2 border ${weatherMode === "cloudy"
-                                                    ? "bg-slate-800 text-white border-slate-800"
-                                                    : "bg-white text-slate-600 hover:bg-slate-50 border-slate-200"
-                                                    }`}
-                                            >
-                                                <span className="text-xs">☁️</span> Cloudy
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {/* Battery Capacity */}
-                                    <div>
-                                        <label className="text-xs text-slate-600 flex justify-between font-medium">
-                                            <span className="flex items-center gap-1">
-                                                <Battery className="w-3 h-3 text-slate-500" />
-                                                Battery Capacity
-                                            </span>
-                                            <span className="text-slate-900">{batteryCapacity} kWh</span>
-                                        </label>
-                                        <input
-                                            type="range"
-                                            min="5"
-                                            max="20"
-                                            value={batteryCapacity}
-                                            onChange={(e) => setBatteryCapacity(Number(e.target.value))}
-                                            className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer mt-2 accent-blue-600"
-                                        />
-                                    </div>
-
-                                    {/* Initial SoC */}
-                                    <div>
-                                        <label className="text-xs text-slate-600 flex justify-between font-medium">
-                                            <span>Initial State of Charge</span>
-                                            <span className="text-slate-900">{initialSoC}%</span>
-                                        </label>
-                                        <input
-                                            type="range"
-                                            min="20"
-                                            max="100"
-                                            value={initialSoC}
-                                            onChange={(e) => setInitialSoC(Number(e.target.value))}
-                                            className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer mt-2 accent-blue-600"
-                                        />
-                                    </div>
-
-                                    {/* Time-of-Day Tariff */}
-                                    <div className="bg-slate-50 rounded border border-slate-200 p-3">
-                                        <label className="text-xs text-slate-500 mb-3 block flex items-center gap-1 font-medium">
-                                            <Zap className="w-3 h-3" />
-                                            Time-of-Day Tariff (₹/kWh)
-                                        </label>
-
-                                        <div className="mb-3">
-                                            <label className="text-xs text-slate-600 font-medium mb-1 block">Tariff Mode</label>
-                                            <select
-                                                value={tariffMode}
-                                                onChange={(e) => setTariffMode(e.target.value as "manual" | "derc")}
-                                                className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-slate-900"
-                                            >
-                                                <option value="manual">Manual (custom prices)</option>
-                                                <option value="derc">DERC Official (Delhi)</option>
-                                            </select>
-                                        </div>
-
-                                        {tariffMode === "derc" && (
-                                            <div className="grid grid-cols-2 gap-2 mb-3">
-                                                <div>
-                                                    <label className="text-xs text-slate-600 font-medium mb-1 block">Season</label>
-                                                    <select
-                                                        value={dercSeason}
-                                                        onChange={(e) => setDercSeason(e.target.value as "summer" | "winter")}
-                                                        className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-slate-900"
-                                                    >
-                                                        <option value="summer">Summer (May–Sep)</option>
-                                                        <option value="winter">Winter (Nov–Mar)</option>
-                                                    </select>
-                                                </div>
-                                                <div>
-                                                    <label className="text-xs text-slate-600 font-medium mb-1 block">DISCOM</label>
-                                                    <select
-                                                        value={dercDiscom}
-                                                        onChange={(e) => setDercDiscom(e.target.value as "TPDDL" | "BRPL" | "BYPL" | "NDMC")}
-                                                        className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-slate-900"
-                                                    >
-                                                        <option value="TPDDL">TPDDL</option>
-                                                        <option value="BRPL">BRPL</option>
-                                                        <option value="BYPL">BYPL</option>
-                                                        <option value="NDMC">NDMC</option>
-                                                    </select>
+                                        {isCostEfficiencyExpanded && (
+                                            <div className="p-4">
+                                                <div className="space-y-3 text-sm">
+                                                    <div className="flex justify-between items-center p-2 bg-slate-50 rounded border border-slate-100">
+                                                        <span className="text-slate-600 text-xs">Baseline Cost</span>
+                                                        <span className="text-slate-900 font-mono font-medium">₹{result.summary.baseline_total_cost.toFixed(2)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center p-2 bg-sage-50/50 rounded border border-sage-100">
+                                                        <span className="text-sage-800 text-xs">Smart Cost</span>
+                                                        <span className="text-sage-700 font-mono font-bold">₹{result.summary.smart_total_cost.toFixed(2)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-end pt-1">
+                                                        <span className="text-slate-500 text-xs">Net Savings</span>
+                                                        <div className="text-right">
+                                                            <span className="text-emerald-600 font-bold text-lg">
+                                                                {result.summary.cost_saved_percent.toFixed(1)}%
+                                                            </span>
+                                                            <span className="text-slate-400 text-xs ml-1">saved</span>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         )}
-
-                                        {tariffMode === "derc" && (
-                                            <p className="text-[10px] text-slate-500 mb-2">
-                                                Source: Delhi Electricity Regulatory Commission (DERC) ToD tariff (FY 2018–19)
-                                            </p>
-                                        )}
-
-                                        <div className="space-y-3">
-                                            {/* Off-Peak Price */}
-                                            <div>
-                                                <label className="text-xs text-slate-600 font-medium mb-1 block">
-                                                    <span className="text-blue-600">Off-Peak</span>
-                                                </label>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-slate-600 text-xs">₹</span>
-                                                    <input
-                                                        type="number"
-                                                        min="2"
-                                                        max="8"
-                                                        step="0.5"
-                                                        value={offPeakPrice}
-                                                        onChange={(e) => setOffPeakPrice(Number(e.target.value))}
-                                                        disabled={tariffMode === "derc"}
-                                                        className="flex-1 px-2 py-1.5 border border-blue-200 rounded text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
-                                                    />
-                                                    <span className="text-slate-500 text-xs">/kWh</span>
-                                                </div>
-                                            </div>
-
-                                            {/* Standard Price */}
-                                            <div>
-                                                <label className="text-xs text-slate-600 font-medium mb-1 block">
-                                                    <span className="text-slate-600">Standard</span>
-                                                </label>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-slate-600 text-xs">₹</span>
-                                                    <input
-                                                        type="number"
-                                                        min="4"
-                                                        max="10"
-                                                        step="0.5"
-                                                        value={standardPrice}
-                                                        onChange={(e) => setStandardPrice(Number(e.target.value))}
-                                                        className="flex-1 px-2 py-1.5 border border-slate-300 rounded text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-500"
-                                                    />
-                                                    <span className="text-slate-500 text-xs">/kWh</span>
-                                                </div>
-                                            </div>
-
-                                            {/* Peak Price */}
-                                            <div>
-                                                <label className="text-xs text-slate-600 font-medium mb-1 block">
-                                                    <span className="text-red-600">Peak</span>
-                                                </label>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-slate-600 text-xs">₹</span>
-                                                    <input
-                                                        type="number"
-                                                        min="6"
-                                                        max="15"
-                                                        step="0.5"
-                                                        value={peakPrice}
-                                                        onChange={(e) => setPeakPrice(Number(e.target.value))}
-                                                        disabled={tariffMode === "derc"}
-                                                        className="flex-1 px-2 py-1.5 border border-red-200 rounded text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-60"
-                                                    />
-                                                    <span className="text-slate-500 text-xs">/kWh</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Challenge Mode Button */}
-                                <button
-                                    onClick={() => {
-                                        setSelectedChallenge(null);
-                                        setShowChallengeModal(true);
-                                    }}
-                                    className="w-full py-2 rounded-lg text-sm font-medium border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 transition-colors flex items-center justify-center gap-2"
-                                >
-                                    <Target className="w-4 h-4" />
-                                    Try a Challenge
-                                </button>
-                                {activeChallenge && (
-                                    <div className="mt-2 px-3 py-2 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-700">
-                                        <div className="flex items-center gap-1.5">
-                                            <Target className="w-3 h-3" />
-                                            <span className="font-medium">Active: </span>
-                                            {challenges.find(c => c.id === activeChallenge.id)?.title}
-                                            <span className="text-blue-500 capitalize ml-1">({activeChallenge.difficulty})</span>
-                                        </div>
                                     </div>
                                 )}
                             </div>
+
+                            {/* Center - 3D Visualization */}
+                            <div className="lg:col-span-6 space-y-4">
+                                <div id="tour-live-view" className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+                                    <div className="p-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+                                        <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                                            <Zap className="w-4 h-4 text-sage-600" />
+                                            Microgrid Live View
+                                        </h3>
+                                        <div className="flex items-center gap-1">
+                                            {/* 2D/3D Toggle */}
+                                            <div className="flex items-center bg-slate-200 rounded-lg p-0.5 mr-2">
+                                                <button
+                                                    onClick={() => setVisualizationMode("2d")}
+                                                    className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all ${visualizationMode === "2d"
+                                                        ? "bg-white text-slate-900 shadow-sm"
+                                                        : "text-slate-500 hover:text-slate-700"
+                                                        }`}
+                                                    title="2D Mode - Better for low-end devices"
+                                                >
+                                                    <Smartphone className="w-3 h-3" />
+                                                    2D
+                                                </button>
+                                                <button
+                                                    onClick={() => setVisualizationMode("3d")}
+                                                    className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all ${visualizationMode === "3d"
+                                                        ? "bg-white text-slate-900 shadow-sm"
+                                                        : "text-slate-500 hover:text-slate-700"
+                                                        }`}
+                                                    title="3D Mode - Enhanced visualization"
+                                                >
+                                                    <Monitor className="w-3 h-3" />
+                                                    3D
+                                                </button>
+                                            </div>
+                                            <button
+                                                onClick={() => setIsPlaying(!isPlaying)}
+                                                className="p-1.5 hover:bg-slate-200 rounded text-slate-600 transition-colors"
+                                                title={isPlaying ? "Pause" : "Play"}
+                                            >
+                                                {isPlaying ? (
+                                                    <Pause className="w-4 h-4 fill-current" />
+                                                ) : (
+                                                    <Play className="w-4 h-4 fill-current" />
+                                                )}
+                                            </button>
+                                            <button
+                                                onClick={() => { setCurrentHour(0); setIsPlaying(false); }}
+                                                className="p-1.5 hover:bg-slate-200 rounded text-slate-600 transition-colors"
+                                                title="Reset"
+                                            >
+                                                <RotateCcw className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="relative overflow-hidden bg-black">
+                                        {fromDesigner && designerNodes.length > 0 ? (
+                                            /* Render the user's designed grid with live data */
+                                            <Suspense fallback={
+                                                <div className="w-full h-[350px] flex items-center justify-center bg-black">
+                                                    <div className="w-8 h-8 border-4 border-sage-500 border-t-transparent rounded-full animate-spin" />
+                                                </div>
+                                            }>
+                                                {visualizationMode === "3d" ? (
+                                                    <DesignerLive3DScene nodes={designerNodes} wires={designerWires} currentData={currentData} />
+                                                ) : (
+                                                    <DesignerLive2DScene nodes={designerNodes} wires={designerWires} currentData={currentData} />
+                                                )}
+                                            </Suspense>
+                                        ) : (
+                                            /* Default hardcoded scene */
+                                            visualizationMode === "3d" ? (
+                                                <Microgrid3DScene currentData={currentData} />
+                                            ) : (
+                                                <Microgrid2DScene currentData={currentData} />
+                                            )
+                                        )}
+                                    </div>
+
+                                    {/* Time Slider */}
+                                    <div className="p-3 border-t border-slate-200 bg-white">
+                                        <div className="flex items-center gap-4">
+                                            <span className="text-sm font-mono font-medium text-slate-700 w-12 text-center bg-slate-100 rounded py-0.5">
+                                                {String(currentHour).padStart(2, "0")}:00
+                                            </span>
+                                            <input
+                                                type="range"
+                                                min="0"
+                                                max="23"
+                                                value={currentHour}
+                                                onChange={(e) => setCurrentHour(Number(e.target.value))}
+                                                className="flex-1 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sage-600"
+                                            />
+                                            <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${getTariffSlot(currentHour) === "peak"
+                                                ? "bg-red-50 text-red-600 border-red-100"
+                                                : getTariffSlot(currentHour) === "offpeak"
+                                                    ? "bg-emerald-50 text-emerald-600 border-emerald-100"
+                                                    : "bg-slate-50 text-slate-600 border-slate-200"
+                                                }`}>
+                                                {getTariffSlot(currentHour) === "peak"
+                                                    ? "Peak Price"
+                                                    : getTariffSlot(currentHour) === "offpeak"
+                                                        ? "Off-Peak"
+                                                        : "Standard"}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Dynamic Power Source Info */}
+                                    <div className="p-3 border-t border-slate-200 bg-gradient-to-r from-slate-50 to-white">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <div className="w-2 h-2 rounded-full bg-sage-500 animate-pulse" />
+                                            <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Active Power Sources</span>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            {/* Solar Source */}
+                                            {currentData.solar_generation > 0 && (
+                                                <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full">
+                                                    <Sun className="w-3.5 h-3.5 text-amber-500" />
+                                                    <span className="text-xs font-medium text-amber-700">
+                                                        Solar: {currentData.solar_generation.toFixed(1)} kW
+                                                    </span>
+                                                    {currentData.solar_generation >= currentData.load_demand && (
+                                                        <span className="text-[10px] bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded-full font-semibold">PRIMARY</span>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Grid Source */}
+                                            {currentData.grid_usage > 0 && (
+                                                <div className="flex items-center gap-2 px-3 py-1.5 bg-sage-50 border border-sage-200 rounded-full">
+                                                    <Zap className="w-3.5 h-3.5 text-sage-500" />
+                                                    <span className="text-xs font-medium text-sage-700">
+                                                        Grid: {currentData.grid_usage.toFixed(1)} kW
+                                                    </span>
+                                                    {currentData.grid_usage > currentData.solar_generation && currentData.battery_discharge === 0 && (
+                                                        <span className="text-[10px] bg-sage-200 text-sage-800 px-1.5 py-0.5 rounded-full font-semibold">PRIMARY</span>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Battery Discharging */}
+                                            {currentData.battery_discharge > 0 && (
+                                                <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-full">
+                                                    <Battery className="w-3.5 h-3.5 text-emerald-500" />
+                                                    <span className="text-xs font-medium text-emerald-700">
+                                                        Battery: {currentData.battery_discharge.toFixed(1)} kW
+                                                    </span>
+                                                    <span className="text-[10px] bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded-full font-semibold">DISCHARGING</span>
+                                                </div>
+                                            )}
+
+                                            {/* Battery Charging */}
+                                            {currentData.battery_charge > 0 && (
+                                                <div className="flex items-center gap-2 px-3 py-1.5 bg-sage-50 border border-sage-200 rounded-full">
+                                                    <Battery className="w-3.5 h-3.5 text-sage-500" />
+                                                    <span className="text-xs font-medium text-sage-700">
+                                                        Charging: {currentData.battery_charge.toFixed(1)} kW
+                                                    </span>
+                                                    <span className="text-[10px] bg-sage-200 text-sage-800 px-1.5 py-0.5 rounded-full font-semibold">STORING</span>
+                                                </div>
+                                            )}
+
+                                            {/* Night time - no solar */}
+                                            {currentData.solar_generation === 0 && currentData.grid_usage === 0 && currentData.battery_discharge === 0 && (
+                                                <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-full">
+                                                    <span className="text-xs font-medium text-slate-500">No active power flow</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Power Flow Summary */}
+                                        <div className="mt-3 pt-3 border-t border-slate-100">
+                                            <p className="text-xs text-slate-600">
+                                                {currentData.solar_generation > 0 && currentData.solar_generation >= currentData.load_demand ? (
+                                                    <span className="text-amber-600 font-medium">
+                                                        ☀️ Solar is fully powering the load ({currentData.load_demand.toFixed(1)} kW).
+                                                        {currentData.battery_charge > 0 && ` Excess ${currentData.battery_charge.toFixed(1)} kW is charging the battery.`}
+                                                    </span>
+                                                ) : currentData.solar_generation > 0 && currentData.grid_usage > 0 ? (
+                                                    <span className="text-sage-600 font-medium">
+                                                        ⚡ Solar provides {currentData.solar_generation.toFixed(1)} kW, Grid supplements {currentData.grid_usage.toFixed(1)} kW to meet {currentData.load_demand.toFixed(1)} kW demand.
+                                                    </span>
+                                                ) : currentData.battery_discharge > 0 ? (
+                                                    <span className="text-emerald-600 font-medium">
+                                                        🔋 Battery discharging {currentData.battery_discharge.toFixed(1)} kW during peak hours to reduce grid dependency.
+                                                    </span>
+                                                ) : currentData.grid_usage > 0 ? (
+                                                    <span className="text-slate-600 font-medium">
+                                                        🌙 Night time: Grid is the primary power source ({currentData.grid_usage.toFixed(1)} kW).
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-slate-500">Waiting for simulation data...</span>
+                                                )}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Current Stats Below Visualization */}
+                                <div className="bg-white rounded-lg border border-slate-200 p-4">
+                                    <h3 className="text-sm font-semibold text-slate-900 mb-3">Current Statistics</h3>
+                                    <div className="grid grid-cols-4 gap-3">
+                                        <StatCard
+                                            icon={<Sun className="w-4 h-4" />}
+                                            label="Solar"
+                                            value={`${currentData.solar_generation.toFixed(1)} kW`}
+                                            color="text-amber-500"
+                                            bgColor=""
+                                        />
+                                        <StatCard
+                                            icon={<Home className="w-4 h-4" />}
+                                            label="Load"
+                                            value={`${currentData.load_demand.toFixed(1)} kW`}
+                                            color="text-slate-600"
+                                            bgColor=""
+                                        />
+                                        <StatCard
+                                            icon={<Battery className="w-4 h-4" />}
+                                            label="Battery"
+                                            value={`${currentData.battery_soc.toFixed(0)}%`}
+                                            color={currentData.battery_soc > 20 ? "text-emerald-600" : "text-red-500"}
+                                            bgColor=""
+                                        />
+                                        <StatCard
+                                            icon={<Zap className="w-4 h-4" />}
+                                            label="Grid"
+                                            value={`${currentData.grid_usage.toFixed(1)} kW`}
+                                            color="text-sage-600"
+                                            bgColor=""
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Right - Configuration & Results */}
+                            <div id="tour-stats-charts" className="lg:col-span-3 space-y-4">
+                                {/* Live Battery Status Strip */}
+                                <div className="bg-white rounded-lg border border-slate-200 p-3 flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-2 min-w-max">
+                                        <div className={`w-2 h-2 rounded-full ${currentData.battery_charge > 0 ? "bg-emerald-500 animate-pulse" : currentData.battery_discharge > 0 ? "bg-amber-500 animate-pulse" : "bg-slate-300"}`} />
+                                        <span className="text-xs font-semibold text-slate-700">Battery</span>
+                                    </div>
+                                    <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                        <div
+                                            className={`h-full transition-all duration-500 ${currentData.battery_soc > 20 ? "bg-emerald-500" : "bg-red-500"}`}
+                                            style={{ width: `${Math.min(100, Math.max(0, currentData.battery_soc))}%` }}
+                                        />
+                                    </div>
+                                    <span className="text-xs font-mono font-bold text-slate-700 min-w-[3ch] text-right">{currentData.battery_soc.toFixed(0)}%</span>
+                                </div>
+
+                                {/* Configuration Panel */}
+                                <div id="tour-configuration" className="bg-white rounded-lg border border-slate-200 p-4">
+                                    <h3 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                                        <Settings className="w-4 h-4 text-sage-600" />
+                                        System Configuration
+                                    </h3>
+
+                                    {/* Run Button */}
+                                    <button
+                                        id="tour-run-button"
+                                        onClick={runSimulation}
+                                        disabled={isLoading}
+                                        className="w-full mb-4 py-2.5 bg-sage-600 hover:bg-sage-700 disabled:opacity-50 disabled:bg-slate-300 rounded-lg font-medium text-sm text-white transition-all flex items-center justify-center gap-2"
+                                    >
+                                        {isLoading ? (
+                                            <>Running...</>
+                                        ) : (
+                                            <>
+                                                <Play className="w-4 h-4 fill-current" />
+                                                Run Simulation
+                                            </>
+                                        )}
+                                    </button>
+
+                                    <div className="space-y-4">
+                                        {/* Solar Capacity */}
+                                        <div>
+                                            <label className="text-xs text-slate-600 flex justify-between font-medium">
+                                                <span className="flex items-center gap-1">
+                                                    <Sun className="w-3 h-3 text-slate-500" />
+                                                    Solar Capacity
+                                                </span>
+                                                <span className="text-slate-900">{solarCapacity} kW</span>
+                                            </label>
+                                            <input
+                                                type="range"
+                                                min="3"
+                                                max="7"
+                                                step="1"
+                                                value={solarCapacity}
+                                                onChange={(e) => setSolarCapacity(Number(e.target.value))}
+                                                className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer mt-2 accent-sage-600"
+                                            />
+                                            <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+                                                <span>3kW</span>
+                                                <span>5kW</span>
+                                                <span>7kW</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Max Load Demand */}
+                                        <div>
+                                            <label className="text-xs text-slate-600 flex justify-between font-medium">
+                                                <span className="flex items-center gap-1">
+                                                    <Home className="w-3 h-3 text-slate-500" />
+                                                    Max Load Demand
+                                                </span>
+                                            </label>
+                                            <div className="flex items-center gap-2 mt-2">
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    max="20"
+                                                    step="0.5"
+                                                    value={peakLoadDemand}
+                                                    onChange={(e) => setPeakLoadDemand(Math.max(1, Math.min(20, Number(e.target.value))))}
+                                                    className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-transparent text-black"
+                                                />
+                                                <span className="text-xs text-slate-600 font-medium">kW</span>
+                                            </div>
+                                            <p className="text-[10px] text-slate-600 mt-1">Maximum power draw at busiest time (evening). Load varies throughout the day.</p>
+                                        </div>
+
+                                        {/* Weather Toggle */}
+                                        <div>
+                                            <label className="text-xs text-slate-600 mb-2 block font-medium">Weather Mode</label>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <button
+                                                    onClick={() => setWeatherMode("sunny")}
+                                                    className={`py-2 px-3 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-2 border ${weatherMode === "sunny"
+                                                        ? "bg-slate-800 text-white border-slate-800"
+                                                        : "bg-white text-slate-600 hover:bg-slate-50 border-slate-200"
+                                                        }`}
+                                                >
+                                                    <Sun className="w-3 h-3" />
+                                                    Sunny
+                                                </button>
+                                                <button
+                                                    onClick={() => setWeatherMode("cloudy")}
+                                                    className={`py-2 px-3 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-2 border ${weatherMode === "cloudy"
+                                                        ? "bg-slate-800 text-white border-slate-800"
+                                                        : "bg-white text-slate-600 hover:bg-slate-50 border-slate-200"
+                                                        }`}
+                                                >
+                                                    <span className="text-xs">☁️</span> Cloudy
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Battery Capacity */}
+                                        <div>
+                                            <label className="text-xs text-slate-600 flex justify-between font-medium">
+                                                <span className="flex items-center gap-1">
+                                                    <Battery className="w-3 h-3 text-slate-500" />
+                                                    Battery Capacity
+                                                </span>
+                                                <span className="text-slate-900">{batteryCapacity} kWh</span>
+                                            </label>
+                                            <input
+                                                type="range"
+                                                min="5"
+                                                max="20"
+                                                value={batteryCapacity}
+                                                onChange={(e) => setBatteryCapacity(Number(e.target.value))}
+                                                className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer mt-2 accent-sage-600"
+                                            />
+                                        </div>
+
+                                        {/* Initial SoC */}
+                                        <div>
+                                            <label className="text-xs text-slate-600 flex justify-between font-medium">
+                                                <span>Initial State of Charge</span>
+                                                <span className="text-slate-900">{initialSoC}%</span>
+                                            </label>
+                                            <input
+                                                type="range"
+                                                min="20"
+                                                max="100"
+                                                value={initialSoC}
+                                                onChange={(e) => setInitialSoC(Number(e.target.value))}
+                                                className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer mt-2 accent-sage-600"
+                                            />
+                                        </div>
+
+                                        {/* Time-of-Day Tariff */}
+                                        <div className="bg-slate-50 rounded border border-slate-200 p-3">
+                                            <label className="text-xs text-slate-500 mb-3 block flex items-center gap-1 font-medium">
+                                                <Zap className="w-3 h-3" />
+                                                Time-of-Day Tariff (₹/kWh)
+                                            </label>
+
+                                            <div className="mb-3">
+                                                <label className="text-xs text-slate-600 font-medium mb-1 block">Tariff Mode</label>
+                                                <select
+                                                    value={tariffMode}
+                                                    onChange={(e) => setTariffMode(e.target.value as "manual" | "derc")}
+                                                    className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-slate-900"
+                                                >
+                                                    <option value="manual">Manual (custom prices)</option>
+                                                    <option value="derc">DERC Official (Delhi)</option>
+                                                </select>
+                                            </div>
+
+                                            {tariffMode === "derc" && (
+                                                <div className="grid grid-cols-2 gap-2 mb-3">
+                                                    <div>
+                                                        <label className="text-xs text-slate-600 font-medium mb-1 block">Season</label>
+                                                        <select
+                                                            value={dercSeason}
+                                                            onChange={(e) => setDercSeason(e.target.value as "summer" | "winter")}
+                                                            className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-slate-900"
+                                                        >
+                                                            <option value="summer">Summer (May–Sep)</option>
+                                                            <option value="winter">Winter (Nov–Mar)</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-xs text-slate-600 font-medium mb-1 block">DISCOM</label>
+                                                        <select
+                                                            value={dercDiscom}
+                                                            onChange={(e) => setDercDiscom(e.target.value as "TPDDL" | "BRPL" | "BYPL" | "NDMC")}
+                                                            className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-slate-900"
+                                                        >
+                                                            <option value="TPDDL">TPDDL</option>
+                                                            <option value="BRPL">BRPL</option>
+                                                            <option value="BYPL">BYPL</option>
+                                                            <option value="NDMC">NDMC</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {tariffMode === "derc" && (
+                                                <p className="text-[10px] text-slate-500 mb-2">
+                                                    Source: Delhi Electricity Regulatory Commission (DERC) ToD tariff (FY 2018–19)
+                                                </p>
+                                            )}
+
+                                            <div className="space-y-3">
+                                                {/* Off-Peak Price */}
+                                                <div>
+                                                    <label className="text-xs text-slate-600 font-medium mb-1 block">
+                                                        <span className="text-sage-600">Off-Peak</span>
+                                                    </label>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-slate-600 text-xs">₹</span>
+                                                        <input
+                                                            type="number"
+                                                            min="2"
+                                                            max="8"
+                                                            step="0.5"
+                                                            value={offPeakPrice}
+                                                            onChange={(e) => setOffPeakPrice(Number(e.target.value))}
+                                                            disabled={tariffMode === "derc"}
+                                                            className="flex-1 px-2 py-1.5 border border-sage-200 rounded text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-sage-500 disabled:opacity-60"
+                                                        />
+                                                        <span className="text-slate-500 text-xs">/kWh</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Standard Price */}
+                                                <div>
+                                                    <label className="text-xs text-slate-600 font-medium mb-1 block">
+                                                        <span className="text-slate-600">Standard</span>
+                                                    </label>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-slate-600 text-xs">₹</span>
+                                                        <input
+                                                            type="number"
+                                                            min="4"
+                                                            max="10"
+                                                            step="0.5"
+                                                            value={standardPrice}
+                                                            onChange={(e) => setStandardPrice(Number(e.target.value))}
+                                                            className="flex-1 px-2 py-1.5 border border-slate-300 rounded text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-500"
+                                                        />
+                                                        <span className="text-slate-500 text-xs">/kWh</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Peak Price */}
+                                                <div>
+                                                    <label className="text-xs text-slate-600 font-medium mb-1 block">
+                                                        <span className="text-red-600">Peak</span>
+                                                    </label>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-slate-600 text-xs">₹</span>
+                                                        <input
+                                                            type="number"
+                                                            min="6"
+                                                            max="15"
+                                                            step="0.5"
+                                                            value={peakPrice}
+                                                            onChange={(e) => setPeakPrice(Number(e.target.value))}
+                                                            disabled={tariffMode === "derc"}
+                                                            className="flex-1 px-2 py-1.5 border border-red-200 rounded text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-60"
+                                                        />
+                                                        <span className="text-slate-500 text-xs">/kWh</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Challenge Mode Button */}
+                                    <button
+                                        onClick={() => {
+                                            setSelectedChallenge(null);
+                                            setShowChallengeModal(true);
+                                        }}
+                                        className="w-full py-2 rounded-lg text-sm font-medium border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <Target className="w-4 h-4" />
+                                        Try a Challenge
+                                    </button>
+                                    {activeChallenge && (
+                                        <div className="mt-2 px-3 py-2 bg-sage-50 border border-sage-100 rounded-lg text-xs text-sage-700">
+                                            <div className="flex items-center gap-1.5">
+                                                <Target className="w-3 h-3" />
+                                                <span className="font-medium">Active: </span>
+                                                {challenges.find(c => c.id === activeChallenge.id)?.title}
+                                                <span className="text-sage-500 capitalize ml-1">({activeChallenge.difficulty})</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                )}
+                    )}
 
-                {activeTab === "analysis" && result && (
-                    <AnalysisContent result={result} onDownloadReport={downloadReport} />
-                )}
+                    {activeTab === "analysis" && result && (
+                        <AnalysisContent result={result} onDownloadReport={downloadReport} />
+                    )}
 
-                {activeTab === "analysis" && !result && (
-                    <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-                        <FlaskConical className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                        <h3 className="text-xl font-semibold text-gray-900 mb-2">No Simulation Data</h3>
-                        <p className="text-gray-600 mb-4">Run a simulation first to see the analysis.</p>
-                        <button
-                            onClick={() => setActiveTab("simulation")}
-                            className="px-6 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-colors"
-                        >
-                            Go to Simulation
-                        </button>
-                    </div>
-                )}
+                    {activeTab === "analysis" && !result && (
+                        <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
+                            <FlaskConical className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                            <h3 className="text-xl font-semibold text-gray-900 mb-2">No Simulation Data</h3>
+                            <p className="text-gray-600 mb-4">Run a simulation first to see the analysis.</p>
+                            <button
+                                onClick={() => setActiveTab("simulation")}
+                                className="px-6 py-2 bg-sage-600 hover:bg-sage-500 rounded-lg text-white transition-colors"
+                            >
+                                Go to Simulation
+                            </button>
+                        </div>
+                    )}
 
-                {activeTab === "quiz" && (
-                    <QuizContent />
-                )}
+                    {activeTab === "quiz" && (
+                        <QuizContent />
+                    )}
 
-                {activeTab === "references" && (
-                    <ReferencesContent
-                        isEnergyFlowMaximized={isEnergyFlowMaximized}
-                        setIsEnergyFlowMaximized={setIsEnergyFlowMaximized}
-                        result={result}
-                        activeData={activeData}
-                        currentHour={currentHour}
-                        activeStrategy={activeStrategy}
-                    />
-                )}
+                    {activeTab === "references" && (
+                        <ReferencesContent
+                            isEnergyFlowMaximized={isEnergyFlowMaximized}
+                            setIsEnergyFlowMaximized={setIsEnergyFlowMaximized}
+                            result={result}
+                            activeData={activeData}
+                            currentHour={currentHour}
+                            activeStrategy={activeStrategy}
+                        />
+                    )}
 
-                {activeTab === "feedback" && (
-                    <FeedbackTab />
-                )}
-            </main>
+                    {activeTab === "feedback" && (
+                        <FeedbackTab />
+                    )}
+                </main>
+            </div>
 
             {/* Footer */}
             <footer className="bg-white border-t border-gray-200 mt-8 py-4 relative">
@@ -2449,7 +2516,7 @@ export default function VLabsSimulation() {
                         <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[90vh]">
                             <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
                                 <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                                    <BarChart3 className="w-5 h-5 text-blue-600" />
+                                    <BarChart3 className="w-5 h-5 text-sage-600" />
                                     24-Hour Energy Flow Analysis
                                 </h3>
                                 <button
@@ -2504,7 +2571,7 @@ function TheoryContent() {
     return (
         <div className="bg-white rounded-lg border border-slate-200 p-8 max-w-5xl mx-auto">
             <h2 className="text-2xl font-bold text-slate-900 mb-8 flex items-center gap-3 pb-4 border-b border-slate-100">
-                <BookOpen className="w-6 h-6 text-blue-600" />
+                <BookOpen className="w-6 h-6 text-sage-600" />
                 Theory: Microgrid Energy Management System & Scheduling
             </h2>
 
@@ -2512,7 +2579,7 @@ function TheoryContent() {
                 {/* 1. Introduction & Definition */}
                 <section>
                     <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                        <span className="w-1 h-6 bg-blue-600 rounded-full"></span>
+                        <span className="w-1 h-6 bg-sage-600 rounded-full"></span>
                         1. What is a Microgrid?
                     </h3>
                     <div className="grid md:grid-cols-3 gap-8">
@@ -2536,7 +2603,7 @@ function TheoryContent() {
                                     <span className="text-slate-600"><strong>BESS:</strong> Battery Energy Storage System for energy time-shifting.</span>
                                 </li>
                                 <li className="flex gap-2">
-                                    <Zap className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+                                    <Zap className="w-4 h-4 text-sage-500 shrink-0 mt-0.5" />
                                     <span className="text-slate-600"><strong>The Grid:</strong> Infinite bus acting as backup and supplying power at variable rates.</span>
                                 </li>
                             </ul>
@@ -2569,8 +2636,8 @@ function TheoryContent() {
                             <div className="space-y-3">
                                 <div className="flex items-center gap-3">
                                     <div className="w-16 text-xs text-slate-500 text-right">00:00-06:00</div>
-                                    <div className="flex-1 h-2 bg-blue-100 rounded-full overflow-hidden">
-                                        <div className="h-full bg-blue-500 w-1/3"></div>
+                                    <div className="flex-1 h-2 bg-sage-100 rounded-full overflow-hidden">
+                                        <div className="h-full bg-sage-500 w-1/3"></div>
                                     </div>
                                     <div className="w-16 text-xs font-bold text-slate-700">₹4.0 <span className="text-[10px] font-normal text-slate-400">/kWh</span></div>
                                 </div>
@@ -2596,7 +2663,7 @@ function TheoryContent() {
                 {/* 3. Control Strategies */}
                 <section>
                     <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
-                        <span className="w-1 h-6 bg-purple-600 rounded-full"></span>
+                        <span className="w-1 h-6 bg-sage-600 rounded-full"></span>
                         3. Intelligent Control Strategies
                     </h3>
 
@@ -2627,30 +2694,30 @@ function TheoryContent() {
                             </ul>
                         </div>
 
-                        <div className="border border-blue-200 bg-blue-50/10 rounded-xl p-5 hover:bg-blue-50/20 transition-colors relative overflow-hidden">
+                        <div className="border border-sage-200 bg-sage-50/10 rounded-xl p-5 hover:bg-sage-50/20 transition-colors relative overflow-hidden">
                             <div className="absolute top-0 right-0 p-2 opacity-10">
-                                <Zap className="w-24 h-24 text-blue-600" />
+                                <Zap className="w-24 h-24 text-sage-600" />
                             </div>
                             <div className="flex items-center gap-3 mb-4">
-                                <div className="p-2 bg-blue-100 rounded-lg">
-                                    <FlaskConical className="w-5 h-5 text-blue-600" />
+                                <div className="p-2 bg-sage-100 rounded-lg">
+                                    <FlaskConical className="w-5 h-5 text-sage-600" />
                                 </div>
-                                <h4 className="font-bold text-blue-900">Smart Scheduling Strategy</h4>
+                                <h4 className="font-bold text-sage-900">Smart Scheduling Strategy</h4>
                             </div>
                             <p className="text-slate-600 text-sm mb-4 min-h-[60px]">
                                 Uses <strong>Heuristic Rule-Based Logic</strong> to minimize daily operational cost.
                             </p>
-                            <ul className="space-y-2 text-sm text-slate-700 bg-white border border-blue-100 p-4 rounded-lg">
+                            <ul className="space-y-2 text-sm text-slate-700 bg-white border border-sage-100 p-4 rounded-lg">
                                 <li className="flex items-start gap-2">
-                                    <div className="mt-1 w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></div>
+                                    <div className="mt-1 w-1.5 h-1.5 rounded-full bg-sage-500 shrink-0"></div>
                                     <span><strong>Priority 1 (Harvest):</strong> If Solar &gt; Load, charge battery with surplus (Store "Free" Energy).</span>
                                 </li>
                                 <li className="flex items-start gap-2">
-                                    <div className="mt-1 w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></div>
+                                    <div className="mt-1 w-1.5 h-1.5 rounded-full bg-sage-500 shrink-0"></div>
                                     <span><strong>Priority 2 (Peak Shave):</strong> If Peak Hour &amp; Battery available, discharge to meet load.</span>
                                 </li>
                                 <li className="flex items-start gap-2">
-                                    <div className="mt-1 w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></div>
+                                    <div className="mt-1 w-1.5 h-1.5 rounded-full bg-sage-500 shrink-0"></div>
                                     <span><strong>Priority 3 (Grid):</strong> Only use grid for remaining deficit or off-peak needs.</span>
                                 </li>
                             </ul>
@@ -2727,7 +2794,7 @@ function ProcedureContent({ currentStep, completedSteps, onStepChange, onGoToSim
             {/* Left: Steps List */}
             <div className="bg-white rounded-lg border border-slate-200 p-6">
                 <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
-                    <Settings className="w-5 h-5 text-blue-600" />
+                    <Settings className="w-5 h-5 text-sage-600" />
                     Simulation Walkthrough
                 </h2>
 
@@ -2741,13 +2808,13 @@ function ProcedureContent({ currentStep, completedSteps, onStepChange, onGoToSim
                                 key={step.id}
                                 onClick={() => onStepChange(index)}
                                 className={`w-full text-left p-4 rounded-lg border transition-all group ${isActive
-                                    ? "bg-slate-50 border-blue-500"
+                                    ? "bg-slate-50 border-sage-500"
                                     : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50"
                                     }`}
                             >
                                 <div className="flex items-start gap-4">
                                     <div className={`w-8 h-8 rounded flex items-center justify-center transition-colors ${isActive
-                                        ? "bg-blue-600 text-white"
+                                        ? "bg-sage-600 text-white"
                                         : isCompleted
                                             ? "bg-slate-800 text-white"
                                             : "bg-slate-100 text-slate-400"
@@ -2763,7 +2830,7 @@ function ProcedureContent({ currentStep, completedSteps, onStepChange, onGoToSim
                                             {step.description}
                                         </p>
                                     </div>
-                                    {isActive && <ChevronRight className="w-4 h-4 text-blue-500" />}
+                                    {isActive && <ChevronRight className="w-4 h-4 text-sage-500" />}
                                 </div>
                             </button>
                         )
@@ -2774,7 +2841,7 @@ function ProcedureContent({ currentStep, completedSteps, onStepChange, onGoToSim
             {/* Right: GIF Preview */}
             <div className="bg-white rounded-lg border border-slate-200 p-6">
                 <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
-                    <Play className="w-5 h-5 text-blue-600" />
+                    <Play className="w-5 h-5 text-sage-600" />
                     Step {currentStep + 1} Preview
                 </h2>
                 <p className="text-sm text-slate-600 mb-4">{stepGifDescriptions[currentStep]}</p>
@@ -2803,7 +2870,7 @@ function ProcedureContent({ currentStep, completedSteps, onStepChange, onGoToSim
                                 onStepChange(currentStep + 1);
                             }
                         }}
-                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-2"
+                        className="px-4 py-2 text-sm font-medium text-white bg-sage-600 hover:bg-sage-700 rounded-lg transition-colors flex items-center gap-2"
                     >
                         {currentStep === PROCEDURE_STEPS.length - 1 ? 'Go to Simulation' : 'Next'}
                         <ChevronRight className="w-4 h-4" />
@@ -2936,7 +3003,7 @@ function AnalysisContent({ result, onDownloadReport }: { result: SimulationResul
             {/* Energy Flow Graph */}
             <div className="bg-white rounded-xl border border-gray-200 p-6">
                 <h3 className="text-sm font-medium text-gray-900 mb-4 flex items-center gap-2">
-                    <BarChart3 className="w-4 h-4 text-blue-600" />
+                    <BarChart3 className="w-4 h-4 text-sage-600" />
                     24-Hour Energy Flow (Smart Strategy)
                 </h3>
                 <div className="h-[400px] bg-slate-50 rounded-lg border border-slate-100 overflow-hidden">
@@ -2996,7 +3063,7 @@ function AnalysisContent({ result, onDownloadReport }: { result: SimulationResul
                                         <td className="text-right py-2.5 px-3 text-gray-500">
                                             {baseline.grid_usage.toFixed(1)}
                                         </td>
-                                        <td className="text-right py-2.5 px-3 text-indigo-600 font-medium">
+                                        <td className="text-right py-2.5 px-3 text-sage-600 font-medium">
                                             {smart.grid_usage.toFixed(1)}
                                         </td>
                                         <td className={`text-right py-2.5 px-3 font-medium ${savings > 0 ? "text-green-600" : "text-gray-400"
@@ -3101,8 +3168,8 @@ function QuizContent() {
         <div className="space-y-8 animate-in fade-in duration-500">
             <div className="bg-white rounded-xl p-8 border border-slate-200">
                 <div className="flex items-center gap-4 mb-6">
-                    <div className="p-3 bg-indigo-50 rounded-lg">
-                        <CheckSquare className="w-8 h-8 text-indigo-600" />
+                    <div className="p-3 bg-sage-50 rounded-lg">
+                        <CheckSquare className="w-8 h-8 text-sage-600" />
                     </div>
                     <div>
                         <h2 className="text-2xl font-bold text-slate-900">Knowledge Check</h2>
@@ -3123,7 +3190,7 @@ function QuizContent() {
                                         disabled={submitted}
                                         onClick={() => setAnswers({ ...answers, [q.id]: optIdx })}
                                         className={`w-full text-left p-4 rounded-md border transition-all flex items-center justify-between ${answers[q.id] === optIdx
-                                            ? "bg-indigo-50 border-indigo-200 text-indigo-900"
+                                            ? "bg-sage-50 border-sage-200 text-sage-900"
                                             : "bg-white border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700"
                                             } ${showResults && q.correct === optIdx
                                                 ? "!bg-green-50 !border-green-300 !text-green-800"
@@ -3133,7 +3200,7 @@ function QuizContent() {
                                             }`}
                                     >
                                         <span className="flex items-center gap-3">
-                                            <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs border ${answers[q.id] === optIdx ? "border-indigo-500 bg-indigo-100 text-indigo-700" : "border-slate-300 text-slate-500"
+                                            <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs border ${answers[q.id] === optIdx ? "border-sage-500 bg-sage-100 text-sage-700" : "border-slate-300 text-slate-500"
                                                 } ${showResults && q.correct === optIdx ? "!bg-green-100 !border-green-500 !text-green-700" : ""}`}>
                                                 {String.fromCharCode(65 + optIdx)}
                                             </span>
@@ -3154,7 +3221,7 @@ function QuizContent() {
                     <div>
                         {showResults && (
                             <p className="text-lg font-medium">
-                                Score: <span className={score >= 4 ? "text-green-600" : "text-indigo-600"}>{score} / {questions.length}</span>
+                                Score: <span className={score >= 4 ? "text-green-600" : "text-sage-600"}>{score} / {questions.length}</span>
                                 <span className="text-sm text-slate-500 ml-2">
                                     {score === questions.length ? "Excellent!" : score >= 3 ? "Good job!" : "Keep learning!"}
                                 </span>
@@ -3167,7 +3234,7 @@ function QuizContent() {
                             disabled={Object.keys(answers).length < questions.length}
                             className={`px-6 py-2.5 rounded-lg font-medium text-white transition-colors ${Object.keys(answers).length < questions.length
                                 ? "bg-slate-300 cursor-not-allowed"
-                                : "bg-indigo-600 hover:bg-indigo-700"
+                                : "bg-sage-600 hover:bg-sage-700"
                                 }`}
                         >
                             Submit Answers
@@ -3277,7 +3344,7 @@ function ReferencesContent({
                                                 href={item.link}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="text-base font-medium text-blue-700 hover:underline cursor-pointer inline-block"
+                                                className="text-base font-medium text-sage-700 hover:underline cursor-pointer inline-block"
                                             >
                                                 {item.title}
                                             </a>
@@ -3349,7 +3416,7 @@ function VLabsToggleMenu({
                                 type="checkbox"
                                 checked={allExpanded}
                                 onChange={handleToggleAll}
-                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                className="rounded border-slate-300 text-sage-600 focus:ring-sage-500"
                             />
                             <span className="text-sm font-medium">
                                 {allExpanded ? "Collapse All" : "Expand All"}
@@ -3366,7 +3433,7 @@ function VLabsToggleMenu({
                                 type="checkbox"
                                 checked={isEnergyFlowExpanded}
                                 onChange={() => setIsEnergyFlowExpanded(!isEnergyFlowExpanded)}
-                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                className="rounded border-slate-300 text-sage-600 focus:ring-sage-500"
                             />
                             <span className="text-sm">Energy Flow</span>
                         </button>
@@ -3379,7 +3446,7 @@ function VLabsToggleMenu({
                                 type="checkbox"
                                 checked={isBillExpanded}
                                 onChange={() => setIsBillExpanded(!isBillExpanded)}
-                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                className="rounded border-slate-300 text-sage-600 focus:ring-sage-500"
                             />
                             <span className="text-sm">Electricity Bill</span>
                         </button>
@@ -3392,7 +3459,7 @@ function VLabsToggleMenu({
                                 type="checkbox"
                                 checked={isBatteryExpanded}
                                 onChange={() => setIsBatteryExpanded(!isBatteryExpanded)}
-                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                className="rounded border-slate-300 text-sage-600 focus:ring-sage-500"
                             />
                             <span className="text-sm">Battery Status</span>
                         </button>

@@ -4,3 +4,5 @@ numpy
 pydantic
 groq
 python-dotenv
+scikit-learn
+joblib

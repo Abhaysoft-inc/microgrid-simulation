@@ -7,10 +7,14 @@ Provides endpoints for running energy simulations with configurable parameters.
 
 import os
 import json
+import pickle
+from functools import lru_cache
+from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, List
+import numpy as np
 from dotenv import load_dotenv
 
 from simulation import MicrogridSimulator, SimulationConfig
@@ -57,6 +61,31 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+
+
+# ============================================
+# BMS Model Utilities
+# ============================================
+
+@lru_cache(maxsize=1)
+def _load_bms_artifacts():
+    model_path = Path(__file__).resolve().parent / "model" / "bms_model.pkl"
+    scaler_path = Path(__file__).resolve().parent / "model" / "scaler.pkl"
+
+    if not model_path.exists():
+        raise FileNotFoundError(f"BMS model not found at {model_path}")
+
+    with model_path.open("rb") as f:
+        model = pickle.load(f)
+
+    scaler = None
+    if scaler_path.exists():
+        with scaler_path.open("rb") as f:
+            scaler = pickle.load(f)
+
+    return model, scaler
 
 
 # ============================================
@@ -139,6 +168,31 @@ class SimulationRequest(BaseModel):
                 "derc_discom": "TPDDL"
             }
         }
+
+
+class BmsPredictRequest(BaseModel):
+    """Request model for BMS predictions."""
+    features: List[float] = Field(
+        description="Ordered numeric features for the BMS model"
+    )
+    return_probabilities: Optional[bool] = Field(
+        default=False,
+        description="If supported by the model, include class probabilities"
+    )
+
+
+class BmsPredictResponse(BaseModel):
+    prediction: float
+    probabilities: Optional[List[float]] = None
+    model_type: Optional[str] = None
+    n_features: Optional[int] = None
+
+
+class BmsMetadataResponse(BaseModel):
+    model_type: str
+    n_features: Optional[int] = None
+    feature_names: Optional[List[str]] = None
+    scaler_type: Optional[str] = None
 
 
 # ============================================
@@ -224,6 +278,61 @@ async def get_default_config():
         "off_peak_price": config.off_peak_price,
         "peak_hours": config.peak_hours
     }
+
+
+@app.get("/bms/metadata", response_model=BmsMetadataResponse)
+async def get_bms_metadata():
+    """Get BMS model metadata (feature count, names, types)."""
+    try:
+        model, scaler = _load_bms_artifacts()
+        n_features = getattr(model, "n_features_in_", None)
+        feature_names = getattr(model, "feature_names_in_", None)
+        if feature_names is not None:
+            feature_names = [str(name) for name in feature_names]
+
+        if n_features is None and scaler is not None:
+            n_features = getattr(scaler, "n_features_in_", None)
+
+        return BmsMetadataResponse(
+            model_type=type(model).__name__,
+            n_features=n_features,
+            feature_names=feature_names,
+            scaler_type=type(scaler).__name__ if scaler is not None else None
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"BMS metadata error: {str(e)}")
+
+
+@app.post("/bms/predict", response_model=BmsPredictResponse)
+async def predict_bms(request: BmsPredictRequest):
+    """Run a BMS prediction using the stored model and scaler."""
+    try:
+        model, scaler = _load_bms_artifacts()
+        features = np.array(request.features, dtype=float).reshape(1, -1)
+
+        if scaler is not None and hasattr(scaler, "transform"):
+            features = scaler.transform(features)
+
+        prediction = model.predict(features)
+        prediction_value = float(np.ravel(prediction)[0])
+
+        probabilities = None
+        if request.return_probabilities and hasattr(model, "predict_proba"):
+            proba = model.predict_proba(features)
+            probabilities = [float(p) for p in np.ravel(proba)]
+
+        n_features = getattr(model, "n_features_in_", None)
+        if n_features is None and scaler is not None:
+            n_features = getattr(scaler, "n_features_in_", None)
+
+        return BmsPredictResponse(
+            prediction=prediction_value,
+            probabilities=probabilities,
+            model_type=type(model).__name__,
+            n_features=n_features
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"BMS prediction error: {str(e)}")
 
 
 # ============================================

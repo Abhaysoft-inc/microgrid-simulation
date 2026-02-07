@@ -7,7 +7,7 @@
  * Uses Three.js for 3D visualization, D3.js for charts, and p5.js for animations.
  */
 
-import React from "react";
+import React, { Suspense } from "react";
 import dynamic from "next/dynamic";
 
 // Dynamic imports for client-side only components
@@ -21,6 +21,13 @@ const VLabsSimulation = dynamic(() => import("@/components/VLabsSimulation"), {
 });
 
 export default function VLabsSimulationPage() {
-    return <VLabsSimulation />;
-
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-gradient-to-br from-[#1a1a2e] to-[#16213e] flex items-center justify-center">
+                <div className="text-white text-xl">Loading Simulation...</div>
+            </div>
+        }>
+            <VLabsSimulation />
+        </Suspense>
+    );
 }
