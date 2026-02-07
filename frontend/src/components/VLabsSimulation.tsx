@@ -33,34 +33,41 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://microgrid-simulation
 const PROCEDURE_STEPS = [
     {
         id: 1,
+        title: "Design Your Microgrid",
+        description: "Use the drag-and-drop designer to create your own microgrid by adding solar panels, batteries, grid connection, and loads. Connect components with wires.",
+        action: "design",
+        icon: Target,
+    },
+    {
+        id: 2,
         title: "Initialize Microgrid",
         description: "Set the battery capacity (kWh) and initial state of charge. The battery stores excess solar energy for later use.",
         action: "configure",
         icon: Battery,
     },
     {
-        id: 2,
+        id: 3,
         title: "Set Energy Prices",
         description: "Configure peak (₹8/kWh, 2PM-10PM) and off-peak (₹5/kWh) electricity prices. Smart strategy uses these to minimize costs.",
         action: "pricing",
         icon: Settings,
     },
     {
-        id: 3,
+        id: 4,
         title: "Run Baseline Strategy",
         description: "Simulate 24 hours with baseline approach: Solar powers load directly, grid fills any deficit, battery remains idle.",
         action: "baseline",
         icon: Zap,
     },
     {
-        id: 4,
+        id: 5,
         title: "Run Smart Strategy",
         description: "Simulate with intelligent scheduling: Charge battery when solar exceeds load, discharge during peak hours to reduce grid usage.",
         action: "smart",
         icon: FlaskConical,
     },
     {
-        id: 5,
+        id: 6,
         title: "Analyze Results",
         description: "Compare costs and grid usage between strategies. Smart strategy achieves peak shaving and cost reduction.",
         action: "analyze",
@@ -129,7 +136,7 @@ export default function VLabsSimulation() {
     const fromDesigner = searchParams.get("from_designer") === "true";
 
     // Tab state
-    const [activeTab, setActiveTab] = useState<"theory" | "procedure" | "simulation" | "analysis" | "quiz" | "references" | "feedback">(fromDesigner ? "simulation" : "theory");
+    const [activeTab, setActiveTab] = useState<"problem" | "theory" | "procedure" | "simulation" | "analysis" | "quiz" | "references" | "feedback">(fromDesigner ? "simulation" : "problem");
 
     // Procedure step state
     const [currentStep, setCurrentStep] = useState(0);
@@ -1652,7 +1659,7 @@ export default function VLabsSimulation() {
                         </div>
                         <button
                             onClick={() => router.push("/microgrid-designer")}
-                            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-sage-600 to-sage-600 hover:from-sage-500 hover:to-sage-500 text-white text-sm font-semibold rounded-lg transition shadow-md shadow-sage-600/20"
+                            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-sage-600 to-sage-600 hover:from-sage-500 hover:to-sage-500 text-white text-sm font-semibold rounded transition shadow-md shadow-sage-600/20"
                         >
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
@@ -1682,6 +1689,7 @@ export default function VLabsSimulation() {
                 {/* Left Vertical Tab Navigation */}
                 <nav className="w-20 bg-white border-r border-gray-200 flex flex-col items-center py-4 gap-2 sticky top-0 h-screen overflow-y-auto">
                     {[
+                        { id: "problem", label: "Problem", icon: Target },
                         { id: "theory", label: "Theory", icon: BookOpen },
                         { id: "procedure", label: "Procedure", icon: Settings },
                         { id: "simulation", label: "Simulation", icon: FlaskConical },
@@ -1692,7 +1700,7 @@ export default function VLabsSimulation() {
                     ].map((tab) => (
                         <button
                             key={tab.id}
-                            onClick={() => setActiveTab(tab.id as "theory" | "procedure" | "simulation" | "analysis" | "quiz" | "references" | "feedback")}
+                            onClick={() => setActiveTab(tab.id as "problem" | "theory" | "procedure" | "simulation" | "analysis" | "quiz" | "references" | "feedback")}
                             className={`flex flex-col items-center justify-center gap-1 w-16 h-16 rounded-lg text-xs font-medium transition-all ${activeTab === tab.id
                                 ? "bg-sage-50 text-sage-700 border-2 border-sage-600"
                                 : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
@@ -1707,6 +1715,10 @@ export default function VLabsSimulation() {
 
                 {/* Main Content Area */}
                 <main className="flex-1 max-w-7xl mx-auto px-4 py-6">
+                    {activeTab === "problem" && (
+                        <ProblemContent onGoToTheory={() => setActiveTab("theory")} />
+                    )}
+
                     {activeTab === "theory" && (
                         <TheoryContent />
                     )}
@@ -1717,6 +1729,7 @@ export default function VLabsSimulation() {
                             completedSteps={completedSteps}
                             onStepChange={setCurrentStep}
                             onGoToSimulation={() => setActiveTab("simulation")}
+                            onGoToDesigner={() => router.push('/microgrid-designer')}
                         />
                     )}
 
@@ -2566,6 +2579,213 @@ function StatCard({ icon, label, value, color, bgColor }: {
     );
 }
 
+// Problem Content Component
+function ProblemContent({ onGoToTheory }: { onGoToTheory: () => void }) {
+    return (
+        <div className="bg-white rounded-lg border border-slate-200 p-8 max-w-5xl mx-auto">
+            <h2 className="text-2xl font-bold text-slate-900 mb-8 flex items-center gap-3 pb-4 border-b border-slate-100">
+                <Target className="w-6 h-6 text-sage-600" />
+                Problem Statement: Microgrid Energy Management Challenge
+            </h2>
+
+            <div className="space-y-8">
+                {/* Problem Overview */}
+                <section>
+                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                        <span className="w-1 h-6 bg-sage-600 rounded-full"></span>
+                        Overview
+                    </h3>
+                    <p className="text-slate-600 leading-relaxed text-sm mb-4">
+                        In today's energy landscape, residential and commercial buildings face the challenge of managing electricity costs while integrating renewable energy sources. Traditional grid-connected systems rely entirely on utility power, which can be expensive during peak demand hours and contribute to higher carbon emissions.
+                    </p>
+                    <p className="text-slate-600 leading-relaxed text-sm">
+                        This simulation addresses the <strong>real-world problem of optimizing energy usage in a grid-connected microgrid</strong> that includes solar photovoltaic (PV) panels, battery energy storage, and conventional grid power.
+                    </p>
+                </section>
+
+                {/* The Challenge */}
+                <section className="bg-sage-50  border-sage-500 rounded-lg p-6">
+                    <h3 className="text-lg font-bold text-sage-900 mb-3 flex items-center gap-2">
+                        <AlertTriangle className="w-5 h-5" />
+                        The Challenge
+                    </h3>
+                    <p className="text-slate-700 leading-relaxed text-sm mb-3">
+                        How can we <strong>minimize electricity costs</strong> over a 24-hour period while:
+                    </p>
+                    <ul className="space-y-2 text-sm text-slate-700">
+                        <li className="flex items-start gap-3">
+                            <span className="text-sage-600 font-bold mt-0.5">1.</span>
+                            <span>Meeting continuous load demand from residential/commercial consumers</span>
+                        </li>
+                        <li className="flex items-start gap-3">
+                            <span className="text-sage-600 font-bold mt-0.5">2.</span>
+                            <span>Utilizing intermittent solar energy generation (available only during daylight hours)</span>
+                        </li>
+                        <li className="flex items-start gap-3">
+                            <span className="text-sage-600 font-bold mt-0.5">3.</span>
+                            <span>Managing battery storage with limited capacity and charge/discharge constraints</span>
+                        </li>
+                        <li className="flex items-start gap-3">
+                            <span className="text-sage-600 font-bold mt-0.5">4.</span>
+                            <span>Responding to time-varying electricity prices (peak vs. off-peak tariffs)</span>
+                        </li>
+                    </ul>
+                </section>
+
+                {/* Key Constraints */}
+                <section>
+                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                        <span className="w-1 h-6 bg-sage-600 rounded-full"></span>
+                        System Constraints
+                    </h3>
+                    <div className="grid md:grid-cols-2 gap-4">
+                        <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                            <h4 className="font-semibold text-slate-900 text-sm mb-3 flex items-center gap-2">
+                                <Sun className="w-4 h-4 text-sage-500" />
+                                Solar Generation
+                            </h4>
+                            <ul className="space-y-1.5 text-xs text-slate-600">
+                                <li>• Intermittent: Only available during daylight (6 AM - 6 PM)</li>
+                                <li>• Variable: Peaks at solar noon, depends on weather</li>
+                                <li>• Cannot be stored without battery</li>
+                                <li>• Excess generation is curtailed if not used</li>
+                            </ul>
+                        </div>
+
+                        <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                            <h4 className="font-semibold text-slate-900 text-sm mb-3 flex items-center gap-2">
+                                <Battery className="w-4 h-4 text-sage-500" />
+                                Battery Storage
+                            </h4>
+                            <ul className="space-y-1.5 text-xs text-slate-600">
+                                <li>• Limited capacity (typically 5-20 kWh)</li>
+                                <li>• State of Charge (SOC) must stay within safe limits</li>
+                                <li>• Finite charge/discharge rates</li>
+                                <li>• Cannot serve load without prior charging</li>
+                            </ul>
+                        </div>
+
+                        <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                            <h4 className="font-semibold text-slate-900 text-sm mb-3 flex items-center gap-2">
+                                <Zap className="w-4 h-4 text-sage-500" />
+                                Grid Connection
+                            </h4>
+                            <ul className="space-y-1.5 text-xs text-slate-600">
+                                <li>• Always available but costs money</li>
+                                <li>• Price varies by time of day (ToU pricing)</li>
+                                <li>• Peak hours (2-10 PM): Higher rates</li>
+                                <li>• Off-peak hours: Lower rates</li>
+                            </ul>
+                        </div>
+
+                        <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                            <h4 className="font-semibold text-slate-900 text-sm mb-3 flex items-center gap-2">
+                                <Home className="w-4 h-4 text-slate-500" />
+                                Load Demand
+                            </h4>
+                            <ul className="space-y-1.5 text-xs text-slate-600">
+                                <li>• Continuous requirement 24/7</li>
+                                <li>• Variable: Higher in evening, lower at night</li>
+                                <li>• Must be met at all times</li>
+                                <li>• Cannot be reduced in baseline scenario</li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+
+                {/* Objectives */}
+                <section>
+                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                        <span className="w-1 h-6 bg-sage-600 rounded-full"></span>
+                        Learning Objectives
+                    </h3>
+                    <div className="grid md:grid-cols-2 gap-4">
+                        <div className="space-y-3">
+                            <h4 className="font-semibold text-slate-900 text-sm">Primary Goals:</h4>
+                            <ul className="space-y-2">
+                                <li className="flex items-start gap-3 text-sm">
+                                    <CheckCircle2 className="w-4 h-4 text-sage-600 mt-0.5 shrink-0" />
+                                    <span className="text-slate-600">Understand the impact of Time-of-Use (ToU) electricity pricing on operational costs</span>
+                                </li>
+                                <li className="flex items-start gap-3 text-sm">
+                                    <CheckCircle2 className="w-4 h-4 text-sage-600 mt-0.5 shrink-0" />
+                                    <span className="text-slate-600">Learn how battery energy storage enables energy arbitrage</span>
+                                </li>
+                                <li className="flex items-start gap-3 text-sm">
+                                    <CheckCircle2 className="w-4 h-4 text-sage-600 mt-0.5 shrink-0" />
+                                    <span className="text-slate-600">Compare baseline (reactive) vs. smart (proactive) energy management strategies</span>
+                                </li>
+                            </ul>
+                        </div>
+                        <div className="space-y-3">
+                            <h4 className="font-semibold text-slate-900 text-sm">Skills Developed:</h4>
+                            <ul className="space-y-2">
+                                <li className="flex items-start gap-3 text-sm">
+                                    <CheckCircle2 className="w-4 h-4 text-sage-600 mt-0.5 shrink-0" />
+                                    <span className="text-slate-600">Analyze 24-hour energy flow patterns and identify optimization opportunities</span>
+                                </li>
+                                <li className="flex items-start gap-3 text-sm">
+                                    <CheckCircle2 className="w-4 h-4 text-sage-600 mt-0.5 shrink-0" />
+                                    <span className="text-slate-600">Design and evaluate rule-based energy management algorithms</span>
+                                </li>
+                                <li className="flex items-start gap-3 text-sm">
+                                    <CheckCircle2 className="w-4 h-4 text-sage-600 mt-0.5 shrink-0" />
+                                    <span className="text-slate-600">Calculate cost savings and environmental benefits of smart energy scheduling</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+
+                {/* Expected Outcomes */}
+                <section className="bg-sage-50 rounded-lg p-6 border border-sage-200">
+                    <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
+                        <Lightbulb className="w-5 h-5 text-sage-600" />
+                        Expected Outcomes
+                    </h3>
+                    <p className="text-slate-700 text-sm mb-3">
+                        By completing this simulation, you will:
+                    </p>
+                    <ul className="space-y-2">
+                        <li className="flex items-start gap-3 text-sm text-slate-700">
+                            <span className="text-sage-600 font-bold">→</span>
+                            <span>Demonstrate that smart scheduling can reduce electricity costs by <strong>20-40%</strong> compared to baseline operation</span>
+                        </li>
+                        <li className="flex items-start gap-3 text-sm text-slate-700">
+                            <span className="text-sage-600 font-bold">→</span>
+                            <span>Show how battery storage enables "peak shaving" by using stored solar energy during expensive peak hours</span>
+                        </li>
+                        <li className="flex items-start gap-3 text-sm text-slate-700">
+                            <span className="text-sage-600 font-bold">→</span>
+                            <span>Visualize the relationship between solar generation, battery state of charge, and grid usage over 24 hours</span>
+                        </li>
+                        <li className="flex items-start gap-3 text-sm text-slate-700">
+                            <span className="text-sage-600 font-bold">→</span>
+                            <span>Calculate environmental benefits in terms of CO₂ emissions reduced and renewable energy utilization</span>
+                        </li>
+                    </ul>
+                </section>
+
+                {/* Call to Action */}
+                <section className="text-center bg-gradient-to-r from-sage-50 to-sage-100 rounded-lg p-6 border border-sage-200">
+                    <h3 className="text-lg font-bold text-slate-900 mb-2">Ready to Solve the Challenge?</h3>
+                    <p className="text-slate-600 text-sm mb-4">
+                        Proceed to the <strong>Theory</strong> section to understand the concepts, then move to <strong>Simulation</strong> to test your solutions!
+                    </p>
+                    <button
+                        onClick={onGoToTheory}
+                        className="px-6 py-3 bg-sage-600 hover:bg-sage-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 mx-auto"
+                    >
+                        <BookOpen className="w-4 h-4" />
+                        Go to Theory
+                        <ChevronRight className="w-4 h-4" />
+                    </button>
+                </section>
+            </div>
+        </div>
+    );
+}
+
 // Theory Content Component
 function TheoryContent() {
     return (
@@ -2766,27 +2986,30 @@ function TheoryContent() {
 }
 
 // Procedure Content Component
-function ProcedureContent({ currentStep, completedSteps, onStepChange, onGoToSimulation }: {
+function ProcedureContent({ currentStep, completedSteps, onStepChange, onGoToSimulation, onGoToDesigner }: {
     currentStep: number;
     completedSteps: number[];
     onStepChange: (step: number) => void;
     onGoToSimulation: () => void;
+    onGoToDesigner: () => void;
 }) {
     // Map each step to a GIF
     const stepGifs: Record<number, string> = {
-        0: '/battery-capacity.gif',  // Initialize Microgrid
-        1: '/energy-prices.gif',     // Set Energy Prices
-        2: '/baseline.gif',          // Run Baseline Strategy
-        3: '/smart.gif',             // Run Smart Strategy
-        4: '/smart.gif',             // Analyze Results (reuse smart gif)
+        0: '/design.png',             // Design Your Microgrid
+        1: '/battery-capacity.gif',  // Initialize Microgrid
+        2: '/energy-prices.gif',     // Set Energy Prices
+        3: '/baseline.gif',          // Run Baseline Strategy
+        4: '/smart.gif',             // Run Smart Strategy
+        5: '/smart.gif',             // Analyze Results (reuse smart gif)
     };
 
     const stepGifDescriptions: Record<number, string> = {
-        0: 'Configure your battery capacity and initial state of charge',
-        1: 'Set peak and off-peak electricity pricing',
-        2: 'Watch how the baseline strategy operates without optimization',
-        3: 'See how the smart strategy optimizes energy usage',
-        4: 'Compare the results of both strategies',
+        0: 'Drag and drop components to design your custom microgrid layout',
+        1: 'Configure your battery capacity and initial state of charge',
+        2: 'Set peak and off-peak electricity pricing',
+        3: 'Watch how the baseline strategy operates without optimization',
+        4: 'See how the smart strategy optimizes energy usage',
+        5: 'Compare the results of both strategies',
     };
 
     return (
@@ -2852,6 +3075,17 @@ function ProcedureContent({ currentStep, completedSteps, onStepChange, onGoToSim
                         className="w-full h-full object-contain"
                     />
                 </div>
+                {currentStep === 0 && (
+                    <div className="mt-4">
+                        <button
+                            onClick={onGoToDesigner}
+                            className="w-full px-4 py-3 text-sm font-medium text-white bg-sage-600 hover:bg-sage-700 rounded-lg transition-colors flex items-center justify-center gap-2"
+                        >
+                            <Target className="w-4 h-4" />
+                            Go to Designer
+                        </button>
+                    </div>
+                )}
                 <div className="mt-4 flex items-center justify-between">
                     <button
                         onClick={() => onStepChange(Math.max(0, currentStep - 1))}
